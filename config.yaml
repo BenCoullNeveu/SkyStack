@@ -1,0 +1,51 @@
+# === General Settings ===
+pixinsight_cli_path: 'C:/Program Files/PixInsight/bin/PixInsight.exe'  # Path to PixInsight CLI executable
+log_level: 'DEBUG'  # DEBUG, INFO, WARNING, ERROR
+
+# === Auto-Transfer ===
+dropbox_source: 'D:\Dropbox\SkyShare Data'  # Source directory in Dropbox
+local_target: 'D:\Astrophotography\SkyShare Data'
+delete_after_transfer: true  # Delete source files after transfer
+reverse_transfer: false  # Transfer from local to Dropbox
+subdirs:
+  - LIGHT
+  - DARK
+  - BIAS
+  - FLAT
+
+# === Auto-DARK Stacking ===
+dark_base_dir: 'D:\Astrophotography\SkyShare Data\DARK'  # Base directory for dark frames
+dark_master_output: 'D:/Astrophotography/SkyShare Data/MASTERS/DARK'  # Output directory for master dark frames
+dark_search_days: 30  # group DARK frames within this range
+dark_keywords:
+  gain_key: "GAIN"
+  offset_key: "OFFSET"
+  exposure_key: "EXPTIME"
+  temperature_key: "CCD-TEMP"
+
+# === Auto-FLAT Stacking ===
+flat_base_dir: 'D:\Astrophotography\SkyShare Data\FLAT'  # Base directory for dark frames
+flat_master_output: 'D:/Astrophotography/SkyShare Data/MASTERS/FLAT'  # Output directory for master dark frames
+flat_search_days: 0 # same day
+flat_rotation_tolerance: 1  # degrees
+flat_keywords: 
+  filter_key: "FILTER"
+  rotation_key: "ROTATANG"
+  gain_key: "GAIN"
+  offset_key: "OFFSET"
+  exposure_key: "EXPTIME"
+
+# === Image Calibration ===
+light_base_dir: 'D:\Astrophotography\SkyShare Data\LIGHT\California Nebula'
+calibrated_output_dir: 'D:\Astrophotography\SkyShare Data\CALIBRATED'
+calibration_search_days_flat: 10  # ± days to find matching flats
+calibration_search_months_dark: 5  # ± months to find matching darks
+
+# === FITS Header Keywords ===
+header_filter_key: "FILTER"
+header_rotation_key: "ROTATANG"
+header_gain_key: "GAIN"
+header_offset_key: "OFFSET"
+header_exptime_key: "EXPTIME"
+header_temperature_key: "SET-TEMP"
+header_img_type_key: "IMAGETYP"  # e.g., LIGHT, DARK, BIAS, FLAT
