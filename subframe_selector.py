@@ -65,14 +65,22 @@ def get_filter_choice():
     print("-" * 30)
     
     while True:
-        choice = input("Votre choix (1-7): ").strip()
-        
-        if choice in filters:
-            filter_code, filter_name = filters[choice]
-            print(f"✅ Filtre sélectionné: {filter_code} ({filter_name})")
-            return filter_code
-        else:
-            print("❌ Choix invalide. Tapez un chiffre entre 1 et 7.")
+        try:
+            choice = input("Votre choix (1-7): ").strip()
+            
+            if choice in filters:
+                filter_code, filter_name = filters[choice]
+                print(f"✅ Filtre sélectionné: {filter_code} ({filter_name})")
+                return filter_code
+            else:
+                print("❌ Choix invalide. Tapez un chiffre entre 1 et 7.")
+                
+        except KeyboardInterrupt:
+            print("\n❌ Arrêt demandé par l'utilisateur")
+            return None
+        except Exception as e:
+            print(f"❌ Erreur: {e}")
+            return None
 
 def show_filter_restrictions(filter_type):
     """Affiche les restrictions pour le filtre choisi"""
@@ -206,6 +214,11 @@ def main():
         print("-" * 40)
         
         filter_type = get_filter_choice()
+        
+        if not filter_type:
+            print("❌ Aucun filtre sélectionné")
+            return False
+            
         show_filter_restrictions(filter_type)
         
         # Étape 4: Créer les dossiers de sortie
