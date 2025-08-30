@@ -182,29 +182,39 @@ class SubframeSelectorGUI:
         filter_label = ttk.Label(parent, text="Filtre:", font=('Arial', 10, 'bold'))
         filter_label.grid(row=row, column=0, sticky=tk.W, pady=(10, 5))
         
-        # Frame pour les boutons radio avec plus d'espace
-        filter_frame = ttk.Frame(parent)
-        filter_frame.grid(row=row+1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
-        filter_frame.columnconfigure(0, weight=1)
-        filter_frame.columnconfigure(1, weight=1)
+        # Notebook (onglets) pour éviter le chevauchement
+        notebook = ttk.Notebook(parent)
+        notebook.grid(row=row+1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        # Onglet Broadband
+        broadband_frame = ttk.Frame(notebook)
+        notebook.add(broadband_frame, text="Broadband")
+        
+        # Onglet Narrowband
+        narrowband_frame = ttk.Frame(notebook)
+        notebook.add(narrowband_frame, text="Narrowband")
         
         self.filter_var = tk.StringVar()
-        filters = [
-            ("L", "Luminance"), ("R", "Rouge"), ("G", "Vert"), ("B", "Bleu"),
-            ("Ha", "H-Alpha"), ("OIII", "O-III"), ("SII", "S-II")
-        ]
         
-        for i, (code, name) in enumerate(filters):
-            radio = ttk.Radiobutton(filter_frame, text=f"{code} - {name}", 
+        # Filtres Broadband
+        broadband_filters = [("L", "Luminance"), ("R", "Rouge"), ("G", "Vert"), ("B", "Bleu")]
+        for i, (code, name) in enumerate(broadband_filters):
+            radio = ttk.Radiobutton(broadband_frame, text=f"{code} - {name}", 
                                    variable=self.filter_var, value=code,
                                    command=self.on_filter_change)
-            row_pos = i // 2
-            col_pos = i % 2
-            radio.grid(row=row_pos, column=col_pos, sticky=tk.W, padx=20, pady=5)
+            radio.grid(row=i, column=0, sticky=tk.W, padx=10, pady=3)
         
-        # Restrictions avec plus d'espace
+        # Filtres Narrowband
+        narrowband_filters = [("Ha", "Hydrogène Alpha"), ("OIII", "Oxygène III"), ("SII", "Soufre II")]
+        for i, (code, name) in enumerate(narrowband_filters):
+            radio = ttk.Radiobutton(narrowband_frame, text=f"{code} - {name}", 
+                                   variable=self.filter_var, value=code,
+                                   command=self.on_filter_change)
+            radio.grid(row=i, column=0, sticky=tk.W, padx=10, pady=3)
+        
+        # Restrictions
         self.restrictions_label = ttk.Label(parent, text="Sélectionnez un filtre pour voir les restrictions",
-                                          foreground='gray', wraplength=700)
+                                          foreground='gray', font=('Arial', 9))
         self.restrictions_label.grid(row=row+2, column=0, columnspan=2, sticky=tk.W, pady=(5, 0))
         
     def create_results_section(self, parent, row):
