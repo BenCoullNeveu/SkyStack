@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-SubframeSelector - Version 2
-Lecture des headers FITS + Interface graphique
+SubframeSelector - Version 2 FINALE
+Interface graphique propre sans chevauchement
 """
 
 import os
@@ -92,7 +92,7 @@ def extract_filter_from_filename(file_path):
     return 'Unknown'
 
 class SubframeSelectorGUI:
-    """Interface graphique pour SubframeSelector"""
+    """Interface graphique pour SubframeSelector - PROPRE ET SIMPLE"""
     
     def __init__(self):
         if not GUI_AVAILABLE:
@@ -120,76 +120,77 @@ class SubframeSelectorGUI:
         
         # Centrer la fenêtre
         self.root.update_idletasks()
-        x = (self.root.winfo_screenwidth() // 2) - (400)
-        y = (self.root.winfo_screenheight() // 2) - (300)
+        x = (self.root.winfo_screenwidth() // 2) - (500)
+        y = (self.root.winfo_screenheight() // 2) - (350)
         self.root.geometry(f"+{x}+{y}")
         
     def create_widgets(self):
-        """Crée l'interface utilisateur"""
+        """Crée l'interface utilisateur - VERSION PROPRE"""
         
         # Frame principal avec padding
-        main_frame = ttk.Frame(self.root, padding="15")
+        main_frame = ttk.Frame(self.root, padding="20")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
-        main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(4, weight=1)
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(3, weight=1)
         
         # Titre
         title_label = ttk.Label(main_frame, text="SkyStack SubframeSelector V2", 
-                               font=('Arial', 14, 'bold'))
-        title_label.grid(row=0, column=0, columnspan=2, pady=(0, 15))
+                               font=('Arial', 16, 'bold'))
+        title_label.grid(row=0, column=0, pady=(0, 20))
         
         # Section dossier
         self.create_directory_section(main_frame, 1)
         
-        # Section filtre
+        # Section filtre - NOUVELLE VERSION PROPRE
         self.create_filter_section(main_frame, 2)
         
         # Section résultats
         self.create_results_section(main_frame, 3)
         
         # Section boutons
-        self.create_buttons_section(main_frame, 5)
+        self.create_buttons_section(main_frame, 4)
         
     def create_directory_section(self, parent, row):
         """Section sélection de dossier"""
         
-        # Label
-        dir_label = ttk.Label(parent, text="Dossier source:", font=('Arial', 10, 'bold'))
-        dir_label.grid(row=row, column=0, sticky=tk.W, pady=(0, 5))
+        # GroupBox pour le dossier
+        dir_group = ttk.LabelFrame(parent, text="Dossier source", padding="15")
+        dir_group.grid(row=row, column=0, sticky=(tk.W, tk.E), pady=(0, 15))
+        dir_group.columnconfigure(0, weight=1)
         
         # Frame pour le chemin et bouton
-        dir_frame = ttk.Frame(parent)
-        dir_frame.grid(row=row+1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        dir_frame = ttk.Frame(dir_group)
+        dir_frame.grid(row=0, column=0, sticky=(tk.W, tk.E))
         dir_frame.columnconfigure(0, weight=1)
         
         self.dir_var = tk.StringVar(value="Aucun dossier sélectionné")
-        self.dir_entry = ttk.Entry(dir_frame, textvariable=self.dir_var, state='readonly')
-        self.dir_entry.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 10))
+        self.dir_entry = ttk.Entry(dir_frame, textvariable=self.dir_var, state='readonly', width=60)
+        self.dir_entry.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 15))
         
-        browse_btn = ttk.Button(dir_frame, text="Parcourir", command=self.browse_directory)
+        browse_btn = ttk.Button(dir_frame, text="Parcourir...", command=self.browse_directory)
         browse_btn.grid(row=0, column=1)
         
         # Info fichiers
-        self.files_info = ttk.Label(parent, text="", foreground='gray')
-        self.files_info.grid(row=row+2, column=0, columnspan=2, sticky=tk.W)
+        self.files_info = ttk.Label(dir_group, text="", font=('Arial', 9))
+        self.files_info.grid(row=1, column=0, sticky=tk.W, pady=(10, 0))
         
     def create_filter_section(self, parent, row):
-        """Section sélection de filtre"""
+        """Section filtre - VERSION COMBOBOX PROPRE"""
         
-        filter_label = ttk.Label(parent, text="Filtre:", font=('Arial', 10, 'bold'))
-        filter_label.grid(row=row, column=0, sticky=tk.W, pady=(10, 5))
+        # GroupBox pour le filtre
+        filter_group = ttk.LabelFrame(parent, text="Sélection du filtre", padding="15")
+        filter_group.grid(row=row, column=0, sticky=(tk.W, tk.E), pady=(0, 15))
         
         # Frame pour la combobox
-        filter_frame = ttk.Frame(parent)
-        filter_frame.grid(row=row+1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        combo_frame = ttk.Frame(filter_group)
+        combo_frame.grid(row=0, column=0, sticky=(tk.W, tk.E))
         
-        # Combobox pour éviter les problèmes d'affichage
-        filter_label2 = ttk.Label(filter_frame, text="Sélectionnez le filtre:")
-        filter_label2.grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+        ttk.Label(combo_frame, text="Filtre utilisé:").grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
         
+        # Combobox avec tous les filtres
         self.filter_var = tk.StringVar()
         filter_values = [
             "L - Luminance",
@@ -201,31 +202,34 @@ class SubframeSelectorGUI:
             "SII - Soufre II"
         ]
         
-        self.filter_combo = ttk.Combobox(filter_frame, textvariable=self.filter_var, 
-                                        values=filter_values, state="readonly", width=25)
+        self.filter_combo = ttk.Combobox(combo_frame, textvariable=self.filter_var, 
+                                        values=filter_values, state="readonly", width=30)
         self.filter_combo.grid(row=0, column=1, sticky=tk.W)
-        self.filter_combo.bind('<<ComboboxSelected>>', self.on_filter_change_combo)
+        self.filter_combo.bind('<<ComboboxSelected>>', self.on_filter_change)
         
         # Restrictions
-        self.restrictions_label = ttk.Label(parent, text="Sélectionnez un filtre pour voir les restrictions",
+        self.restrictions_label = ttk.Label(filter_group, text="Sélectionnez un filtre pour voir les restrictions",
                                           foreground='gray', font=('Arial', 9))
-        self.restrictions_label.grid(row=row+2, column=0, columnspan=2, sticky=tk.W, pady=(5, 0))
+        self.restrictions_label.grid(row=1, column=0, sticky=tk.W, pady=(10, 0))
         
     def create_results_section(self, parent, row):
         """Section résultats avec tableau"""
         
-        results_label = ttk.Label(parent, text="Fichiers détectés:", font=('Arial', 10, 'bold'))
-        results_label.grid(row=row, column=0, sticky=tk.W, pady=(10, 5))
+        # GroupBox pour les résultats
+        results_group = ttk.LabelFrame(parent, text="Fichiers détectés", padding="15")
+        results_group.grid(row=row, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 15))
+        results_group.columnconfigure(0, weight=1)
+        results_group.rowconfigure(0, weight=1)
         
         # Frame pour le tableau avec scrollbar
-        table_frame = ttk.Frame(parent)
-        table_frame.grid(row=row+1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
+        table_frame = ttk.Frame(results_group)
+        table_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         table_frame.columnconfigure(0, weight=1)
         table_frame.rowconfigure(0, weight=1)
         
         # Treeview pour afficher les fichiers
         columns = ('Fichier', 'Température', 'Exposition', 'Filtre', 'Objet')
-        self.tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=10)
+        self.tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=12)
         
         # Configuration des colonnes
         self.tree.heading('Fichier', text='Fichier')
@@ -235,10 +239,10 @@ class SubframeSelectorGUI:
         self.tree.heading('Objet', text='Objet')
         
         self.tree.column('Fichier', width=350)
-        self.tree.column('Température', width=80, anchor='center')
+        self.tree.column('Température', width=100, anchor='center')
         self.tree.column('Exposition', width=80, anchor='center')
-        self.tree.column('Filtre', width=60, anchor='center')
-        self.tree.column('Objet', width=180)
+        self.tree.column('Filtre', width=80, anchor='center')
+        self.tree.column('Objet', width=200)
         
         # Scrollbars
         v_scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.tree.yview)
@@ -254,18 +258,18 @@ class SubframeSelectorGUI:
         """Section boutons"""
         
         button_frame = ttk.Frame(parent)
-        button_frame.grid(row=row, column=0, columnspan=2, pady=15)
+        button_frame.grid(row=row, column=0, pady=20)
         
         self.analyze_btn = ttk.Button(button_frame, text="Analyser les fichiers", 
                                      command=self.analyze_files, state='disabled')
-        self.analyze_btn.grid(row=0, column=0, padx=5)
+        self.analyze_btn.grid(row=0, column=0, padx=10)
         
         self.process_btn = ttk.Button(button_frame, text="Lancer SubframeSelector", 
                                      command=self.process_files, state='disabled')
-        self.process_btn.grid(row=0, column=1, padx=5)
+        self.process_btn.grid(row=0, column=1, padx=10)
         
         quit_btn = ttk.Button(button_frame, text="Quitter", command=self.root.quit)
-        quit_btn.grid(row=0, column=2, padx=5)
+        quit_btn.grid(row=0, column=2, padx=10)
         
     def browse_directory(self):
         """Parcourir pour sélectionner un dossier"""
@@ -293,11 +297,11 @@ class SubframeSelectorGUI:
         self.fits_files = sorted(list(set(files)))
         
         if self.fits_files:
-            self.files_info.config(text=f"{len(self.fits_files)} fichiers FITS trouvés", 
+            self.files_info.config(text=f"✅ {len(self.fits_files)} fichiers FITS trouvés", 
                                   foreground='green')
             self.analyze_btn.config(state='normal')
         else:
-            self.files_info.config(text="Aucun fichier FITS trouvé", foreground='red')
+            self.files_info.config(text="❌ Aucun fichier FITS trouvé", foreground='red')
             self.analyze_btn.config(state='disabled')
             
     def analyze_files(self):
@@ -306,7 +310,6 @@ class SubframeSelectorGUI:
         if not self.fits_files:
             return
             
-        # Progress dialog would be nice here
         self.fits_metadata = []
         
         # Clear existing items
@@ -320,8 +323,12 @@ class SubframeSelectorGUI:
                 self.fits_metadata.append(metadata)
                 
                 # Ajouter au tableau
+                filename = metadata['filename']
+                if len(filename) > 40:
+                    filename = filename[:37] + "..."
+                
                 self.tree.insert('', 'end', values=(
-                    metadata['filename'][:30] + '...' if len(metadata['filename']) > 30 else metadata['filename'],
+                    filename,
                     f"{metadata['temperature']:.1f}",
                     f"{metadata['exposure']:.0f}",
                     metadata['filter'],
@@ -329,12 +336,12 @@ class SubframeSelectorGUI:
                 ))
                 processed += 1
                 
-        self.files_info.config(text=f"{processed} fichiers analysés avec succès", 
+        self.files_info.config(text=f"✅ {processed} fichiers analysés avec succès", 
                               foreground='blue')
         self.update_ui_state()
         
-    def on_filter_change_combo(self, event=None):
-        """Appelé quand le filtre change via combobox"""
+    def on_filter_change(self, event=None):
+        """Appelé quand le filtre change"""
         
         selection = self.filter_var.get()
         if not selection:
@@ -347,14 +354,10 @@ class SubframeSelectorGUI:
         # Mettre à jour les restrictions affichées
         restrictions = self.get_filter_restrictions(self.selected_filter)
         if restrictions:
-            text = f"FWHM ≤ {restrictions['fwhm']}, Excentricité ≤ {restrictions['ecc']}, SNR ≥ {restrictions['snr']}"
-            self.restrictions_label.config(text=text, foreground='black')
+            text = f"✅ Restrictions {self.selected_filter}: FWHM ≤ {restrictions['fwhm']}, Excentricité ≤ {restrictions['ecc']}, SNR ≥ {restrictions['snr']}"
+            self.restrictions_label.config(text=text, foreground='darkgreen', font=('Arial', 9, 'bold'))
         
         self.update_ui_state()
-        
-    def on_filter_change(self):
-        """Appelé quand le filtre change (compatibilité avec l'ancienne méthode)"""
-        self.on_filter_change_combo()
         
     def get_filter_restrictions(self, filter_type):
         """Retourne les restrictions pour un filtre"""
@@ -384,17 +387,32 @@ class SubframeSelectorGUI:
             messagebox.showwarning("Attention", "Sélectionnez un filtre et analysez les fichiers d'abord")
             return
             
-        # Pour V2, on simule encore le traitement
-        result = messagebox.askyesno("Confirmation", 
-            f"Lancer SubframeSelector avec {len(self.fits_metadata)} fichiers et filtre {self.selected_filter}?")
+        result = messagebox.askyesno("Confirmation de traitement", 
+            f"Lancer SubframeSelector avec :\n\n"
+            f"📁 Fichiers : {len(self.fits_metadata)} images FITS\n"
+            f"🔍 Filtre : {self.selected_filter}\n"
+            f"📂 Dossier : {os.path.basename(self.source_directory)}\n"
+            f"⚖️ Restrictions : {self.get_filter_restrictions(self.selected_filter)}\n\n"
+            f"Continuer avec le traitement simulé ?")
             
         if result:
-            messagebox.showinfo("Succès", 
-                f"Traitement simulé terminé!\n\n"
-                f"Fichiers: {len(self.fits_metadata)}\n"
-                f"Filtre: {self.selected_filter}\n"
-                f"Dossier: {os.path.basename(self.source_directory)}\n\n"
-                f"V3 aura l'intégration PixInsight réelle.")
+            # Créer les dossiers de sortie
+            sfs_dir = os.path.join(self.source_directory, "SFS")
+            os.makedirs(os.path.join(sfs_dir, "Approved"), exist_ok=True)
+            os.makedirs(os.path.join(sfs_dir, "Rejected"), exist_ok=True)
+            os.makedirs(os.path.join(sfs_dir, "Reports"), exist_ok=True)
+            
+            messagebox.showinfo("Traitement simulé terminé", 
+                f"🎉 Traitement simulé terminé !\n\n"
+                f"📊 Résultats :\n"
+                f"• Fichiers analysés : {len(self.fits_metadata)}\n"
+                f"• Filtre appliqué : {self.selected_filter}\n"
+                f"• Structure créée : {sfs_dir}\n\n"
+                f"📁 Dossiers créés :\n"
+                f"• SFS/Approved/ (images validées)\n"
+                f"• SFS/Rejected/ (images rejetées)\n"  
+                f"• SFS/Reports/ (rapports CSV)\n\n"
+                f"🚀 Version 3 aura l'intégration PixInsight réelle.")
     
     def run(self):
         """Lance l'application"""
@@ -416,7 +434,7 @@ def run_gui():
         return False
 
 def run_console():
-    """Version console (comme V1)"""
+    """Version console (fallback)"""
     
     print("=" * 60)
     print(f"{TITLE} v{VERSION}")
@@ -425,7 +443,6 @@ def run_console():
     print("Pour l'interface graphique, installez tkinter")
     print("")
     
-    # Réutiliser le code de la V1 adapté
     source_dir = input("Dossier d'images FITS: ").strip()
     
     if not os.path.exists(source_dir):
