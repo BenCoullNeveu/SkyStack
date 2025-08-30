@@ -111,8 +111,8 @@ class SubframeSelectorGUI:
     def setup_window(self):
         """Configuration de la fenêtre principale"""
         self.root.title(f"{TITLE} v{VERSION}")
-        self.root.geometry("800x600")
-        self.root.minsize(700, 500)
+        self.root.geometry("900x650")
+        self.root.minsize(800, 550)
         
         # Style
         style = ttk.Style()
@@ -193,12 +193,12 @@ class SubframeSelectorGUI:
         ]
         
         for i, (code, name) in enumerate(filters):
-            radio = ttk.Radiobutton(filter_frame, text=f"{code} - {name}", 
+            radio = ttk.Radiobutton(filter_frame, text=f"{code} - {name[:15]}" + ("..." if len(name) > 15 else ""), 
                                    variable=self.filter_var, value=code,
                                    command=self.on_filter_change)
             row_pos = i // 2
             col_pos = i % 2
-            radio.grid(row=row_pos, column=col_pos, sticky=tk.W, padx=10, pady=2)
+            radio.grid(row=row_pos, column=col_pos, sticky=tk.W, padx=15, pady=3)
         
         # Restrictions
         self.restrictions_label = ttk.Label(parent, text="Sélectionnez un filtre pour voir les restrictions",
@@ -228,11 +228,11 @@ class SubframeSelectorGUI:
         self.tree.heading('Filtre', text='Filtre')
         self.tree.heading('Objet', text='Objet')
         
-        self.tree.column('Fichier', width=300)
-        self.tree.column('Température', width=80)
-        self.tree.column('Exposition', width=80)
-        self.tree.column('Filtre', width=60)
-        self.tree.column('Objet', width=150)
+        self.tree.column('Fichier', width=350)
+        self.tree.column('Température', width=80, anchor='center')
+        self.tree.column('Exposition', width=80, anchor='center')
+        self.tree.column('Filtre', width=60, anchor='center')
+        self.tree.column('Objet', width=180)
         
         # Scrollbars
         v_scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.tree.yview)
