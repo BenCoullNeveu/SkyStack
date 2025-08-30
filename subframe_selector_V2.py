@@ -111,8 +111,8 @@ class SubframeSelectorGUI:
     def setup_window(self):
         """Configuration de la fenêtre principale"""
         self.root.title(f"{TITLE} v{VERSION}")
-        self.root.geometry("900x650")
-        self.root.minsize(800, 550)
+        self.root.geometry("1000x700")
+        self.root.minsize(900, 600)
         
         # Style
         style = ttk.Style()
@@ -182,28 +182,30 @@ class SubframeSelectorGUI:
         filter_label = ttk.Label(parent, text="Filtre:", font=('Arial', 10, 'bold'))
         filter_label.grid(row=row, column=0, sticky=tk.W, pady=(10, 5))
         
-        # Frame pour les boutons radio
+        # Frame pour les boutons radio avec plus d'espace
         filter_frame = ttk.Frame(parent)
         filter_frame.grid(row=row+1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        filter_frame.columnconfigure(0, weight=1)
+        filter_frame.columnconfigure(1, weight=1)
         
         self.filter_var = tk.StringVar()
         filters = [
             ("L", "Luminance"), ("R", "Rouge"), ("G", "Vert"), ("B", "Bleu"),
-            ("Ha", "Hydrogène Alpha"), ("OIII", "Oxygène III"), ("SII", "Soufre II")
+            ("Ha", "H-Alpha"), ("OIII", "O-III"), ("SII", "S-II")
         ]
         
         for i, (code, name) in enumerate(filters):
-            radio = ttk.Radiobutton(filter_frame, text=f"{code} - {name[:15]}" + ("..." if len(name) > 15 else ""), 
+            radio = ttk.Radiobutton(filter_frame, text=f"{code} - {name}", 
                                    variable=self.filter_var, value=code,
                                    command=self.on_filter_change)
             row_pos = i // 2
             col_pos = i % 2
-            radio.grid(row=row_pos, column=col_pos, sticky=tk.W, padx=15, pady=3)
+            radio.grid(row=row_pos, column=col_pos, sticky=tk.W, padx=20, pady=5)
         
-        # Restrictions
+        # Restrictions avec plus d'espace
         self.restrictions_label = ttk.Label(parent, text="Sélectionnez un filtre pour voir les restrictions",
-                                          foreground='gray')
-        self.restrictions_label.grid(row=row+2, column=0, columnspan=2, sticky=tk.W)
+                                          foreground='gray', wraplength=700)
+        self.restrictions_label.grid(row=row+2, column=0, columnspan=2, sticky=tk.W, pady=(5, 0))
         
     def create_results_section(self, parent, row):
         """Section résultats avec tableau"""
