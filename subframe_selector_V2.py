@@ -182,35 +182,29 @@ class SubframeSelectorGUI:
         filter_label = ttk.Label(parent, text="Filtre:", font=('Arial', 10, 'bold'))
         filter_label.grid(row=row, column=0, sticky=tk.W, pady=(10, 5))
         
-        # Notebook (onglets) pour éviter le chevauchement
-        notebook = ttk.Notebook(parent)
-        notebook.grid(row=row+1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        # Frame pour la combobox
+        filter_frame = ttk.Frame(parent)
+        filter_frame.grid(row=row+1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
         
-        # Onglet Broadband
-        broadband_frame = ttk.Frame(notebook)
-        notebook.add(broadband_frame, text="Broadband")
-        
-        # Onglet Narrowband
-        narrowband_frame = ttk.Frame(notebook)
-        notebook.add(narrowband_frame, text="Narrowband")
+        # Combobox pour éviter les problèmes d'affichage
+        filter_label2 = ttk.Label(filter_frame, text="Sélectionnez le filtre:")
+        filter_label2.grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
         
         self.filter_var = tk.StringVar()
+        filter_values = [
+            "L - Luminance",
+            "R - Rouge", 
+            "G - Vert",
+            "B - Bleu",
+            "Ha - Hydrogène Alpha",
+            "OIII - Oxygène III",
+            "SII - Soufre II"
+        ]
         
-        # Filtres Broadband
-        broadband_filters = [("L", "Luminance"), ("R", "Rouge"), ("G", "Vert"), ("B", "Bleu")]
-        for i, (code, name) in enumerate(broadband_filters):
-            radio = ttk.Radiobutton(broadband_frame, text=f"{code} - {name}", 
-                                   variable=self.filter_var, value=code,
-                                   command=self.on_filter_change)
-            radio.grid(row=i, column=0, sticky=tk.W, padx=10, pady=3)
-        
-        # Filtres Narrowband
-        narrowband_filters = [("Ha", "Hydrogène Alpha"), ("OIII", "Oxygène III"), ("SII", "Soufre II")]
-        for i, (code, name) in enumerate(narrowband_filters):
-            radio = ttk.Radiobutton(narrowband_frame, text=f"{code} - {name}", 
-                                   variable=self.filter_var, value=code,
-                                   command=self.on_filter_change)
-            radio.grid(row=i, column=0, sticky=tk.W, padx=10, pady=3)
+        self.filter_combo = ttk.Combobox(filter_frame, textvariable=self.filter_var, 
+                                        values=filter_values, state="readonly", width=25)
+        self.filter_combo.grid(row=0, column=1, sticky=tk.W)
+        self.filter_combo.bind('<<ComboboxSelected>>', self.on_filter_change_combo)
         
         # Restrictions
         self.restrictions_label = ttk.Label(parent, text="Sélectionnez un filtre pour voir les restrictions",
@@ -339,10 +333,16 @@ class SubframeSelectorGUI:
                               foreground='blue')
         self.update_ui_state()
         
-    def on_filter_change(self):
-        """Appelé quand le filtre change"""
+    def on_filter_change_combo(self, event=None):
+        """Appelé quand le filtre change via combobox"""
         
-        self.selected_filter = self.filter_var.get()
+        selection = self.filter_var.get()
+        if not selection:
+            return
+            
+        # Extraire le code du filtre (première partie avant le tiret)
+        filter_code = selection.split(' - ')[0]
+        self.selected_filter = filter_code
         
         # Mettre à jour les restrictions affichées
         restrictions = self.get_filter_restrictions(self.selected_filter)
@@ -351,6 +351,10 @@ class SubframeSelectorGUI:
             self.restrictions_label.config(text=text, foreground='black')
         
         self.update_ui_state()
+        
+    def on_filter_change(self):
+        """Appelé quand le filtre change (compatibilité avec l'ancienne méthode)"""
+        self.on_filter_change_combo()
         
     def get_filter_restrictions(self, filter_type):
         """Retourne les restrictions pour un filtre"""
