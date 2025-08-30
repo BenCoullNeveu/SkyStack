@@ -32,16 +32,29 @@ function SubframeSelectorDialog() {
     this.__base__ = Dialog;
     this.__base__();
     
+    Console.writeln("🔧 Initialisation de l'interface...");
+    
     // Propriétés
     this.sourceDirectory = "";
     this.selectedFilter = null;
     this.fitsFiles = [];
     this.results = new SubframeResults();
     
+    Console.writeln("📝 Variables initialisées");
+    
     // Interface utilisateur
-    this.setupUI();
-    this.adjustToContents();
-    this.setFixedSize();
+    try {
+        this.setupUI();
+        Console.writeln("🎨 Interface créée");
+        
+        this.adjustToContents();
+        this.setFixedSize();
+        Console.writeln("✅ Dialog prêt à être affiché");
+        
+    } catch (error) {
+        Console.writeln("❌ Erreur lors de la création de l'interface: " + error.message);
+        throw error;
+    }
 }
 
 SubframeSelectorDialog.prototype = new Dialog;
@@ -229,31 +242,36 @@ SubframeSelectorDialog.prototype.findFitsFiles = function() {
     }
     
     this.fitsFiles = [];
+    Console.writeln("🔍 Recherche de fichiers FITS dans: " + this.sourceDirectory);
     
     try {
         var extensions = [".fit", ".fits", ".FIT", ".FITS"];
         var files = [];
         
-        // Utiliser SearchDirectory pour une approche plus fiable
-        var searchFiles = function(dir) {
-            var fileFind = new FileFind;
-            if (fileFind.begin(dir + "/*")) {
-                do {
-                    if (fileFind.isFile) {
-                        var fileName = fileFind.name;
-                        for (var i = 0; i < extensions.length; i++) {
-                            if (fileName.endsWith(extensions[i])) {
-                                files.push(dir + "/" + fileName);
-                                break;
-                            }
+        // Approche plus simple et fiable
+        var fileFind = new FileFind;
+        if (fileFind.begin(this.sourceDirectory + "/*")) {
+            do {
+                if (fileFind.isFile) {
+                    var fileName = fileFind.name;
+                    var fullPath = this.sourceDirectory + "/" + fileName;
+                    
+                    // Vérifier les extensions
+                    for (var i = 0; i < extensions.length; i++) {
+                        if (fileName.toLowerCase().endsWith(extensions[i].toLowerCase())) {
+                            files.push(fullPath);
+                            Console.writeln("  📁 Trouvé: " + fileName);
+                            break;
                         }
                     }
-                } while (fileFind.next());
-            }
-        };
+                }
+            } while (fileFind.next());
+            
+            fileFind.end();
+        }
         
-        searchFiles(this.sourceDirectory);
         this.fitsFiles = files.sort();
+        Console.writeln("📊 Total: " + this.fitsFiles.length + " fichiers FITS");
         
         if (this.fitsFiles.length > 0) {
             this.filesInfoLabel.text = "✅ " + this.fitsFiles.length + " fichiers FITS trouvés";
@@ -264,10 +282,12 @@ SubframeSelectorDialog.prototype.findFitsFiles = function() {
             this.filesInfoLabel.styleSheet = "color: red; font-weight: bold;";
             this.analyzeButton.enabled = false;
         }
+        
     } catch (error) {
         this.filesInfoLabel.text = "⚠️ Erreur lors de la recherche: " + error.message;
         this.filesInfoLabel.styleSheet = "color: orange; font-weight: bold;";
-        Console.writeln("Erreur findFitsFiles: " + error.message);
+        Console.writeln("❌ Erreur findFitsFiles: " + error.message);
+        Console.writeln("Stack: " + error.toString());
     }
     
     this.updateUIState();
@@ -485,10 +505,24 @@ SubframeSelectorDialog.prototype.reset = function() {
 // Point d'entrée principal
 function main() {
     Console.writeln("Démarrage " + TITLE + " v" + VERSION);
+    Console.show();
     
-    var dialog = new SubframeSelectorDialog();
-    dialog.execute();
+    try {
+        var dialog = new SubframeSelectorDialog();
+        var result = dialog.execute();
+        
+        if (result) {
+            Console.writeln("✅ Script terminé avec succès");
+        } else {
+            Console.writeln("❌ Script annulé par l'utilisateur");
+        }
+    } catch (error) {
+        Console.writeln("❌ Erreur lors de l'exécution: " + error.message);
+        Console.writeln("Stack trace: " + error.toString());
+    }
 }
 
-// Lancer le script
-main();
+// Lancer le script seulement si pas en mode paramètres
+if (!Parameters.isViewTarget && !Parameters.isGlobalTarget) {
+    main();
+}
