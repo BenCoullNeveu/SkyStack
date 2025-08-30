@@ -23,6 +23,8 @@ HEADER_TEMPERATURE_KEY = config.get("header_temperature_key")
 # tolerance configs
 MAX_DAYS_DIFF = config.get("dark_search_days")
 
+# Pixinsight instance
+PIXINSIGHT_INSTANCE = config.get("pixinsight_instance")
 
 group_params = [HEADER_EXPTIME_KEY, 
                 HEADER_GAIN_KEY, 
@@ -31,7 +33,7 @@ group_params = [HEADER_EXPTIME_KEY,
 
 groups = group_by_settings(BASE_DIR, group_params)
 
-logger.debug(f"Found {len(groups)} groups of flats frames.")
+logger.debug(f"Found {len(groups)} groups of dark frames.")
 
 master_name_fmt = {
     HEADER_EXPTIME_KEY: (int, "s"),
@@ -39,4 +41,5 @@ master_name_fmt = {
     HEADER_GAIN_KEY: (int, "gain")
 }
 stack(groups, MASTER_OUTPUT, "dark", master_name_fmt,
-      max_days_diff=MAX_DAYS_DIFF)
+      max_days_diff=MAX_DAYS_DIFF,
+      instance=PIXINSIGHT_INSTANCE)

@@ -1,23 +1,30 @@
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
 from astropy.io import fits
+from astropy.time import Time
 import logging
+import yaml
 
 logger = logging.getLogger(__name__)
 
+# LOAD CONFIG FROM PARENT
+config_path = Path(__file__).parent.parent / "config.yaml"
+with open(config_path) as f:
+    config = yaml.safe_load(f)
+
 # Change these to match your FITS headers
-HEADER_FILTER_KEY = "FILTER"
-HEADER_ROTATION_KEY = "ROTATANG"
-HEADER_GAIN_KEY = "GAIN"
-HEADER_OFFSET_KEY = "OFFSET"
-HEADER_EXPTIME_KEY = "EXPTIME"
-HEADER_TEMPERATURE_KEY = "SET-TEMP"
+HEADER_FILTER_KEY = config.get("header_filter_key", "FILTER")
+HEADER_ROTATION_KEY = config.get("header_rotation_key", "ROTATANG")
+HEADER_GAIN_KEY = config.get("header_gain_key", "GAIN")
+HEADER_OFFSET_KEY = config.get("header_offset_key", "OFFSET")
+HEADER_EXPTIME_KEY = config.get("header_exptime_key", "EXPTIME")
+HEADER_TEMPERATURE_KEY = config.get("header_temperature_key", "SET-TEMP")
 
 # Tolerances
-EXPOSURE_TOLERANCE = 1  # seconds
-ROTATION_TOLERANCE = 0.5  # degrees
-TEMP_TOLERANCE = 1.0  # degrees Celsius
+EXPOSURE_TOLERANCE = config.get("exposure_tolerance", 1)
+ROTATION_TOLERANCE = config.get("rotation_tolerance", 0.5)
+TEMP_TOLERANCE = config.get("temp_tolerance", 1.0)
 
 def write_header_info(path: Path, header_info: dict):
     """Write metadata to FITS header."""
@@ -70,7 +77,26 @@ def _safe_cast_float(v):
     except Exception:
         return None
 
+def parse_date_from_header(path: Path):
+    """Extract date from FITS header.
+    Tries several header keywords to find the date-12hours. 
+    This will be useful when grouping by imaging night.
+    -> If not DATE-LOC, then DATE-OBS. 
+    """
+    date_keys = ("DATE-LOC", "DATE-OBS")
+    try:
+        hdr = read_fits_header_info(path)
+    except:
+        logger.error(f"Failed to read FITS header: {path}")
+    date_str = hdr.get("DATE-OBS")
+    if date_str:
+        try:
+            return datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S").date()
+        except Exception as e:
+            logger.error(f"Failed to parse DATE-OBS from header: {e}")
+    return None
 
+# SUPERSEDED BY parse_date_from_header. Will soon be deprecated.
 def parse_date_from_path(path: Path):
     """Try to extract a date from the path parts with YYYY-MM-DD format.
 
@@ -83,6 +109,7 @@ def parse_date_from_path(path: Path):
             continue
     return None
 
+# SUPERSEDED BY parse_date_from_header. Will soon be deprecated.
 def parse_date_from_master_path(master_path: Path):
     """Extract date from master file path in format DDMMYYYY."""
     master_name = master_path.name

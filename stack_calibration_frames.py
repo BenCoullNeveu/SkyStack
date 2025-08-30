@@ -4,7 +4,7 @@ from pathlib import Path
 from collections import defaultdict
 from astro_utils.config_loader import load_config
 from astro_utils.fits_helpers import read_fits_header_info, parse_date_from_path, get_val, write_header_info
-from astro_utils.pixinsight_cli import stack_with_pixinsight
+from astro_utils.pixinsight_cli import launch_pixinsight, stack_with_pixinsight
 from astro_utils.file_ops import ensure_dir
 import logging
 import shutil
@@ -17,8 +17,8 @@ config = load_config(Path(__file__).parent / "config.yaml")
 LOG_LEVEL = str(config.get("log_level", "INFO")).upper()
 logger.setLevel(LOG_LEVEL)
 HEADER_FILTER_KEY = config.get("header_filter_key")
-HEADER_ROTATION_KEY = "ROTATANG"
-HEADER_GAIN_KEY = config.get("header_gain_key", "GAIN")
+HEADER_ROTATION_KEY = config.get("header_rotation_key")
+HEADER_GAIN_KEY = config.get("header_gain_key")
 HEADER_OFFSET_KEY = config.get("header_offset_key")
 HEADER_EXPTIME_KEY = config.get("header_exptime_key")
 HEADER_TEMPERATURE_KEY = config.get("header_temperature_key") 
@@ -41,6 +41,7 @@ def group_by_settings(dir: Path, header_keys=None):
             try:
                 fits_dict = read_fits_header_info(fits_file)
                 date_obs = parse_date_from_path(fits_file)
+                
                 if date_obs is None:
                     continue
                 
@@ -66,10 +67,21 @@ def safe_fmt(value, fmt=str):
         return str(value)
 
 def stack(groups: dict, output_dir: Path, master_name_pref:str, master_name_fmt:dict, 
-          max_days_diff=0, rot_tolerance=None):
+          max_days_diff=0, rot_tolerance=None,
+          instance=None):
     """master_name_fmt os a dict where the keys are the unit and the values are tuples of the format strings and units. 
-    DO NOT INCLUDE DATE! THis will be added automatically following a specific format, i.e. `__%d%m%Y`.
+    DO NOT INCLUDE DATE! This will be added automatically following a specific format, i.e. `__%d%m%Y`.
     master_name_pref is a prefix for the master name. E.g., for `flat`, we get `masterFlat`."""
+    
+    force_new_inst = True
+    if instance is not None and instance < 0:
+        force_new_inst = False
+        instance = None
+        
+    # launch pixinsight
+    if force_new_inst:
+        launch_pixinsight(instance=instance)
+
     ensure_dir(output_dir)
     ngroups = len(groups)
     i = 1
@@ -95,7 +107,9 @@ def stack(groups: dict, output_dir: Path, master_name_pref:str, master_name_fmt:
             master_name += f"__{base_date.strftime('%d%m%Y')}.fits"            
             
             out_path = output_dir / master_name
-            stack_with_pixinsight(batch, out_path)
+            stack_with_pixinsight(batch, 
+                                  out_path, 
+                                  instance=instance)
             # check if file was created
             if out_path.exists():
                 # Add necessary FITS header info

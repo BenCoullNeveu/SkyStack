@@ -94,6 +94,26 @@ function main() {
 
     Console.writeln(">> ImageCalibration completed successfully.");
     Console.writeln("Integrated images saved to: " + outputDir);
+
+    // Write sign
+    try {
+    var scriptDir = "C:/Temp/PixStack";
+    var filePath = scriptDir + "/launch_done.tmp";
+
+    // Ensure the directory exists
+    if (!File.directoryExists(scriptDir)) {
+        File.createDirectory(scriptDir);
+    }
+
+    // Write the signal file
+    let file = new File();
+    file.createForWriting(filePath);
+    file.outTextLn("done");
+    file.close();
+    console.writeln("Signal file created successfully: " + filePath);
+    } catch (error) {
+        console.writeln("Error creating signal file: " + error.message);
+    }
 }
 
 // Run the main function!

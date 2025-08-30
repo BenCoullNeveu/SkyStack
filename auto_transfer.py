@@ -12,12 +12,14 @@ from astro_utils.config_loader import load_config
 config_path = Path(__file__).parent / "config.yaml"
 config = load_config(config_path)
 
-# exrtact config values
-DROPBOX_SOURCE = Path(config.get("dropbox_source", "D:/Dropbox/SkyShare Data"))
-LOCAL_TARGET = Path(config.get("local_target", "D:Astrophotography/2025 Data"))
-SUBDIRS = config.get("subdirs", ["LIGHT", "DARK", "FLAT", "BIAS"])
-DELETE_AFTER_TRANSFER = config.get("delete_after_transfer", True)
-REVERSE_TRANSFER = config.get("reverse_transfer", False)
+# extract config values
+DROPBOX_SOURCE = Path(config.get("dropbox_source"))
+LOCAL_TARGET = Path(config.get("local_target"))
+SUBDIRS = config.get("subdirs")
+DELETE_AFTER_TRANSFER = config.get("delete_after_transfer")
+REMOVE_EMPTY_DIRS = config.get("remove_empty_dirs")
+REVERSE_TRANSFER = config.get("reverse_transfer")
+SPECIFIC_DIR_KEYWORDS = config.get("specific_dir_keywords", [])
 
 if REVERSE_TRANSFER:
     temp = DROPBOX_SOURCE
@@ -45,24 +47,30 @@ def _ensure_local(file: Path):
         logger.warning(f"Could not ensure local copy for {file}: {e}")
 
 
-def _remove_empty_dirs(path: Path):
-    """Recursively remove empty directories starting from `path`."""
+def _remove_empty_dirs(path: Path, protect_root: bool = False):
+    """
+    Recursively remove empty directories starting from `path`.
+    Treats folders that only contain 'desktop.ini' as empty.
+    """
     if not path.exists():
         return
-    for child in path.iterdir():
+
+    for child in list(path.iterdir()):
         if child.is_dir():
-            _remove_empty_dirs(child)  # clean deeper first
-            
-    # Get list of non-desktop.ini files
-    contents = [item for item in path.iterdir() if not (item.is_file() and item.name.lower() == "desktop.ini")]
-    if not contents:
+            _remove_empty_dirs(child, protect_root=False)
+
+    # Collect contents excluding desktop.ini
+    items = list(path.iterdir())
+    non_desktop_items = [item for item in items if item.name.lower() != "desktop.ini"]
+
+    if not non_desktop_items:
         try:
-            # Remove desktop.ini if it exists before deleting folder
-            desktop_ini = path / "desktop.ini"
-            if desktop_ini.exists():
-                desktop_ini.unlink()
-            path.rmdir()
-            logger.info(f"Removed empty directory: {path}")
+            for item in items:
+                if item.name.lower() == "desktop.ini":
+                    item.unlink(missing_ok=True)
+            if not protect_root:
+                path.rmdir()
+                logger.info(f"Removed empty directory: {path}")
         except Exception as e:
             logger.warning(f"Could not remove {path}: {e}")
 
@@ -72,15 +80,16 @@ def _cleanup_subdirs(source: Path, subdirs):
     for sub in subdirs:
         target_dir = source / sub
         if target_dir.exists() and target_dir.is_dir():
-            _remove_empty_dirs(target_dir)
+            _remove_empty_dirs(target_dir, protect_root=True)
 
 
-def _move_with_retry(src: Path, dst: Path, retries=3):
+def _move_with_retry(src: Path, dst: Path, delete_after_transfer: bool, retries=3):
     for attempt in range(retries):
         try:
             _ensure_local(src)
             shutil.copy2(src, dst)
-            os.remove(src)
+            if delete_after_transfer:
+                os.remove(src)
             return
         except OSError as e:
             if attempt < retries - 1:
@@ -89,7 +98,12 @@ def _move_with_retry(src: Path, dst: Path, retries=3):
             else:
                 raise
 
-def transfer_files(source: Path, dest: Path, subdirs: list|str, delete_sources: bool):
+def transfer_files(source: Path, 
+                   dest: Path, 
+                   subdirs: list|str, 
+                   delete_after_transfer: bool,
+                   cleanup_sources: bool,
+                   specific_dir_keywords: list[str]):
     """Move files from source to dest. Skips duplicates."""
     if not source.exists():
         logger.error(f"Source directory does not exist: {source}")
@@ -102,9 +116,11 @@ def transfer_files(source: Path, dest: Path, subdirs: list|str, delete_sources: 
         if not subdir_path.exists() or not subdir_path.is_dir():
             logger.info(f"Skipping missing or invalid subdirectory: {subdir}")
             continue
-        logger.info(f"\n{subdir}/")
+        logger.info(f"{subdir}/")
         last_parent = None
         for file in sorted(subdir_path.rglob("*")):
+            # check for specific keyword
+            if all(keyword in file.parts for keyword in specific_dir_keywords):
                 if file.is_file():
                     rel_path = file.relative_to(source)
                     dest_file = dest / rel_path
@@ -115,15 +131,15 @@ def transfer_files(source: Path, dest: Path, subdirs: list|str, delete_sources: 
                         last_parent = rel_path.parts[0]
 
                     if dest_file.exists():
-                        logger.info(f"    ├── {rel_path.name} (skipped, exists)")
+                        logger.info(f"    ├── {rel_path.name} (skipped; exists)")
                         continue
-                    
-                    _move_with_retry(file, dest_file, retries=3)
+
+                    _move_with_retry(file, dest_file, delete_after_transfer, retries=3)
                     logger.info(f"    ├── {rel_path.name}")
                     count += 1
                 
         # After moving files, remove the subdirectory if empty
-        if delete_sources:
+        if cleanup_sources:
             _cleanup_subdirs(source, subdirs)
                 
     logger.info(f"\n  >>> Transfer complete. {count} files moved.\n")
@@ -145,7 +161,9 @@ def main():
     transfer_files(DROPBOX_SOURCE, 
                    LOCAL_TARGET, 
                    subdirs=SUBDIRS, 
-                   delete_sources=DELETE_AFTER_TRANSFER)
+                   delete_after_transfer=DELETE_AFTER_TRANSFER,
+                   cleanup_sources=REMOVE_EMPTY_DIRS,
+                   specific_dir_keywords=SPECIFIC_DIR_KEYWORDS)
 
 if __name__ == "__main__":
     main()

@@ -14,7 +14,7 @@ function readJson(path) {
 }
 
 function main() {
-    Console.writeln("== Basic Stacking Script for PixInsight CLI ==");
+    console.writeln("== Basic Stacking Script for PixInsight CLI ==");
 
     let configDir = "C:/Temp/PixStack/";
     let inputFilePath = configDir + "input_files.json";
@@ -25,14 +25,14 @@ function main() {
     let params = readJson(paramFilePath);
 
     if (!inputFiles || inputFiles.length < 2) {
-        Console.criticalln("Error: Need at least two input files.");
+        console.criticalln("Error: Need at least two input files.");
         exit(1);
     }
 
     let outputPath = params.output_path;
 
-    // Console.writeln("Input files:");
-    // inputFiles.forEach(f => Console.writeln(" - " + f));
+    // console.writeln("Input files:");
+    // inputFiles.forEach(f => console.writeln(" - " + f));
 
     // Set up ImageIntegration
     let P = new ImageIntegration;
@@ -67,7 +67,7 @@ function main() {
     P.noGUIMessages = true;
     P.showImages = true;
 
-    Console.writeln(">> Running ImageIntegration...");
+    console.writeln(">> Running ImageIntegration...");
     P.executeGlobal();
 
     let win = ImageWindow.activeWindow;
@@ -75,7 +75,7 @@ function main() {
         let base = outputPath.toLowerCase().endsWith(".fits") ? outputPath.slice(0, -5) : outputPath;
         let finalPath = base + ".fits";
 
-        Console.writeln("Saving integrated image to: " + finalPath);
+        console.writeln("Saving integrated image to: " + finalPath);
         win.saveAs(
             finalPath,     // file path
             false,         // query format options
@@ -88,8 +88,25 @@ function main() {
         throw new Error("No active image window after ImageIntegration — integration likely failed.");
     }
 
+    // Writing signal file to indicate completion
+    try {
+    var scriptDir = "C:/Temp/PixStack";
+    var filePath = scriptDir + "/basic_stack_complete.tmp";
 
-    Console.writeln("Done.");
+    // Ensure the directory exists
+    if (!File.directoryExists(scriptDir)) {
+        File.createDirectory(scriptDir);
+    }
+
+    // Write the signal file
+    let file = new File();
+    file.createForWriting(filePath);
+    file.outTextLn("done");
+    file.close();
+    console.writeln("Signal file created successfully: " + filePath);
+} catch (error) {
+    console.writeln("Error creating signal file: " + error.message);
+}
 }
 
 main();

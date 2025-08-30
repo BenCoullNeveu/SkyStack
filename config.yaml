@@ -1,11 +1,17 @@
 # === General Settings ===
 pixinsight_cli_path: 'C:/Program Files/PixInsight/bin/PixInsight.exe'  # Path to PixInsight CLI executable
 log_level: 'DEBUG'  # DEBUG, INFO, WARNING, ERROR
+pixinsight_instance: 2
+exit_instance: true
 
 # === Auto-Transfer ===
 dropbox_source: 'D:\Dropbox\SkyShare Data'  # Source directory in Dropbox
 local_target: 'D:\Astrophotography\SkyShare Data'
+specific_dir_keywords:
+  - FLAT
+  - 2025-08-13_ID0191
 delete_after_transfer: true  # Delete source files after transfer
+remove_empty_dirs: true  # Remove empty directories after transfer
 reverse_transfer: false  # Transfer from local to Dropbox
 subdirs:
   - LIGHT
@@ -36,7 +42,7 @@ flat_keywords:
   exposure_key: "EXPTIME"
 
 # === Image Calibration ===
-light_base_dir: 'D:\Astrophotography\SkyShare Data\LIGHT\California Nebula'
+light_base_dir: 'D:\Astrophotography\SkyShare Data\LIGHT\Barnard 13'
 calibrated_output_dir: 'D:\Astrophotography\SkyShare Data\CALIBRATED'
 calibration_search_days_flat: 10  # ± days to find matching flats
 calibration_search_months_dark: 5  # ± months to find matching darks
@@ -49,3 +55,8 @@ header_offset_key: "OFFSET"
 header_exptime_key: "EXPTIME"
 header_temperature_key: "SET-TEMP"
 header_img_type_key: "IMAGETYP"  # e.g., LIGHT, DARK, BIAS, FLAT
+
+# === General Tolerances ===
+exposure_tolerance: 1  # seconds
+rotation_tolerance: 0.5  # degrees
+temp_tolerance: 1.0  # degrees Celsius
