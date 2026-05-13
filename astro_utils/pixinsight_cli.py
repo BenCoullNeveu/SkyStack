@@ -58,6 +58,8 @@ def launch_pixinsight(instance=None,
                          text=True)
         logger.info(f"Launched PixInsight in automation mode: {process.pid}")
         
+        process.terminate
+        
         # wait for the launch_done.tmp file to appear
         done_path = Path("C:/Temp/PixStack/launch_done.tmp")
         while not done_path.exists():
@@ -73,6 +75,20 @@ def launch_pixinsight(instance=None,
 
     return process
 
+def close_pixinsight(process):
+    """Close the PixInsight instance."""
+    # if instance is not None:
+    #     cmd = [PIXINSIGHT_PATH, 
+    #            f"-n={instance}", 
+    #            "--force-exit"]
+    #     _run_cmd(cmd)
+    try:
+        logger.info(f"Terminating PixInsight process {process.pid}")
+        process.terminate()
+    except Exception as e:
+        logger.exception("Failed to close PixInsight.")
+        raise e
+
 def stack_with_pixinsight(
     file_list,
     output_path: Path,
@@ -83,9 +99,9 @@ def stack_with_pixinsight(
     """
         
     if script_path is None:
-        # filedir = Path(__file__).parent.parent
-        # script_path = filedir / "pixscripts" / "basic_stack_script.js"
-        script_path = "pixscripts/basic_stack_script.js"
+        filedir = Path(__file__).parent.parent
+        script_path = filedir / "pixscripts" / "basic_stack_script.js"
+        # script_path = "pixscripts/basic_stack_script.js"
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
@@ -152,8 +168,8 @@ def calibrate_with_pixinsight(
     
     # Save master calibration files and output directory to JSON
     save_json({
-        "master_flat": str(Path(master_flat).absolute()),
-        "master_dark": str(Path(master_dark).absolute()),
+        "master_flat": str(Path(master_flat).absolute()) if master_flat is not None else "",
+        "master_dark": str(Path(master_dark).absolute()) if master_dark is not None else "",
         "output_dir": str(Path(output_dir).absolute()),
         "prefix": f'__{date_obs.strftime("%d%m%Y")}_c'
     }, PARAMS_JSON)

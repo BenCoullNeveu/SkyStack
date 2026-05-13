@@ -25,6 +25,7 @@ MAX_DAYS_DIFF = config.get("dark_search_days")
 
 # Pixinsight instance
 PIXINSIGHT_INSTANCE = config.get("pixinsight_instance")
+EXIT_INSTANCE = config.get("exit_instance")
 
 group_params = [HEADER_EXPTIME_KEY, 
                 HEADER_GAIN_KEY, 
@@ -42,4 +43,5 @@ master_name_fmt = {
 }
 stack(groups, MASTER_OUTPUT, "dark", master_name_fmt,
       max_days_diff=MAX_DAYS_DIFF,
-      instance=PIXINSIGHT_INSTANCE)
+      instance=PIXINSIGHT_INSTANCE, 
+      exit_instance=EXIT_INSTANCE)

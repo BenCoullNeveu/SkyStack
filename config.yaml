@@ -4,12 +4,34 @@ log_level: 'DEBUG'  # DEBUG, INFO, WARNING, ERROR
 pixinsight_instance: 2
 exit_instance: true
 
+# === MASTER LIGHT SHARING ===
+targets_to_share: # List of target names to share master lights for. Empty list means share all.
+  # - WR-134
+  # - M 31
+  # - Orion
+  # - NGC 7000
+  # - Cone Nebula
+  # - Bubble Widefield
+  # - Cocoon Nebula
+  # - Leo Triplet
+  # - M 38
+  - NGC 6888
+# shared_dir: 'D:\\Dropbox\\SKYSHARE\\READY TO SELL'  # Directory to share master lights
+# shared_dir: 'D:\\Dropbox\\SKYSHARE\\SELLABLE BUT NEEDS MORE DATA'  # Directory to share master lights
+# shared_dir: 'D:\\Dropbox\\SKYSHARE\\TO PROCESS'  # Directory to share master lights
+shared_dir: 'D:\\Dropbox\\SKYSHARE\\CLIENT DATA'  # Directory to share master lights
+masters_dir: 'D:/Astrophotography/SkyShare Data/REGISTERED'
+output_format: 'fits'  # 'fits' or 'xisf'
+exclude_drizzled: true
+overwrite_shared: true  # Whether to overwrite existing files in the shared directory
+combine_logs: false
+
+
 # === Auto-Transfer ===
 dropbox_source: 'D:\Dropbox\SkyShare Data'  # Source directory in Dropbox
 local_target: 'D:\Astrophotography\SkyShare Data'
-specific_dir_keywords:
-  - FLAT
-  - 2025-08-13_ID0191
+specific_dir_keywords: # needs to be a list!
+  # - Cocoon Nebula
 delete_after_transfer: true  # Delete source files after transfer
 remove_empty_dirs: true  # Remove empty directories after transfer
 reverse_transfer: false  # Transfer from local to Dropbox
@@ -42,10 +64,12 @@ flat_keywords:
   exposure_key: "EXPTIME"
 
 # === Image Calibration ===
-light_base_dir: 'D:\Astrophotography\SkyShare Data\LIGHT\Barnard 13'
+target_name: 'NGC 6888'  # Name of the target to process
+light_base_dir: 'D:\Astrophotography\SkyShare Data\LIGHT'
 calibrated_output_dir: 'D:\Astrophotography\SkyShare Data\CALIBRATED'
-calibration_search_days_flat: 10  # ± days to find matching flats
-calibration_search_months_dark: 5  # ± months to find matching darks
+calibration_search_days_flat: 60  # ± days to find matching flats. None to ignore date
+calibration_search_months_dark: 14  # ± months to find matching darks. None to ignore date
+only_plot: false  # If true, only generate plots without calibrating
 
 # === FITS Header Keywords ===
 header_filter_key: "FILTER"
@@ -60,3 +84,20 @@ header_img_type_key: "IMAGETYP"  # e.g., LIGHT, DARK, BIAS, FLAT
 exposure_tolerance: 1  # seconds
 rotation_tolerance: 0.5  # degrees
 temp_tolerance: 1.0  # degrees Celsius
+
+
+### === Triage settings ===
+triage:
+  backend: auto     # auto | cpu | mp | gpu
+  n_workers: 8
+
+  registration:
+    upsample_factor: 20
+    max_shift: 25
+
+  thresholds:
+    ellipticity: 0.35
+    fwhm: 4.5
+    star_ratio: 0.7
+    temporal_drift: 0.05
+    background_gradient: 3.0

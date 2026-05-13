@@ -47,10 +47,10 @@ def plot_summary(calibration_log_path: Path):
                 num_fail = len(expt_data.get("failed lights", []))
                 flat_master = expt_data.get("flat_master", "Missing")
                 if flat_master != "Missing":
-                    flat_master = Path(flat_master).name
+                    flat_master = Path(flat_master).name if flat_master else "None"
                 dark_master = expt_data.get("dark_master", "Missing")
                 if dark_master != "Missing":
-                    dark_master = Path(dark_master).name
+                    dark_master = Path(dark_master).name if dark_master else "None"
                 table_data.append([date, filt, expt, num_cal, num_fail, flat_master, dark_master])
     
     fig, ax = plt.subplots(figsize=(15, 6))

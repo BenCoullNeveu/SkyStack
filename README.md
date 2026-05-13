@@ -23,11 +23,11 @@ Config file: [config.yaml](config.yaml) — edit paths, tolerances and behavior 
 - Packages (example): astropy, numpy, matplotlib, pandas, pyyaml
 Install with pip, e.g.:
 ```sh
-pip install astropy numpy matplotlib pandas pyyaml
+pip install astropy xisf numpy matplotlib pandas pyyaml
 ```
 
 ## Usage
-- Ensure config.yaml is configured for your environment (paths, PIXInsight path, directories).
+- Ensure config.yaml is configured for your environment (paths, PixInsight path, directories).
 - Transfer files from Dropbox:
   ```
   python auto_transfer.py

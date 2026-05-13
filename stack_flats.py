@@ -27,6 +27,7 @@ ROT_TOLERANCE = config.get("flat_rotation_tolerance")
 
 # Pixinsight instance
 PIXINSIGHT_INSTANCE = config.get("pixinsight_instance")
+EXIT_INSTANCE = config.get("exit_instance")
 
 
 group_params = [HEADER_FILTER_KEY, 
@@ -48,4 +49,5 @@ master_name_fmt = {
 stack(groups, MASTER_OUTPUT, "flat", master_name_fmt,
       max_days_diff=config.get("flat_search_days", 30),
       rot_tolerance=config.get("flat_rotation_tolerance", 0.5),
-      instance=PIXINSIGHT_INSTANCE)
+      instance=PIXINSIGHT_INSTANCE, 
+      exit_instance=EXIT_INSTANCE)

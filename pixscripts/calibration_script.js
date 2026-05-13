@@ -58,10 +58,16 @@ function main() {
 
     // Master dark and flat parameters
     P.masterBiasEnabled = false;
-    P.masterDarkEnabled = true;
-    P.masterFlatEnabled = true;
-    P.masterDarkPath = masterDarkPath;
-    P.masterFlatPath = masterFlatPath;
+    P.masterDarkEnabled = false;
+    P.masterFlatEnabled = false;
+    if (masterDarkPath != null && masterDarkPath.length > 0) {
+        P.masterDarkEnabled = true;
+        P.masterDarkPath = masterDarkPath;
+    }
+    if (masterFlatPath != null && masterFlatPath.length > 0) {
+        P.masterFlatEnabled = true;
+        P.masterFlatPath = masterFlatPath;
+    }
 
     // Calibration parameters   
     P.calibrationMode = ImageCalibration.prototype.CalibrateAndCorrect;
@@ -93,24 +99,23 @@ function main() {
     P.executeGlobal();
 
     Console.writeln(">> ImageCalibration completed successfully.");
-    Console.writeln("Integrated images saved to: " + outputDir);
 
     // Write sign
     try {
-    var scriptDir = "C:/Temp/PixStack";
-    var filePath = scriptDir + "/launch_done.tmp";
+        var scriptDir = "C:/Temp/PixStack";
+        var filePath = scriptDir + "/calibration_complete.tmp";
 
-    // Ensure the directory exists
-    if (!File.directoryExists(scriptDir)) {
-        File.createDirectory(scriptDir);
-    }
+        // Ensure the directory exists
+        if (!File.directoryExists(scriptDir)) {
+            File.createDirectory(scriptDir);
+        }
 
-    // Write the signal file
-    let file = new File();
-    file.createForWriting(filePath);
-    file.outTextLn("done");
-    file.close();
-    console.writeln("Signal file created successfully: " + filePath);
+        // Write the signal file
+        let file = new File();
+        file.createForWriting(filePath);
+        file.outTextLn("done");
+        file.close();
+        console.writeln("Signal file created successfully: " + filePath);
     } catch (error) {
         console.writeln("Error creating signal file: " + error.message);
     }

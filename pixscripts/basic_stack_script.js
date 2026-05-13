@@ -26,7 +26,7 @@ function main() {
 
     if (!inputFiles || inputFiles.length < 2) {
         console.criticalln("Error: Need at least two input files.");
-        exit(1);
+        return 1;
     }
 
     let outputPath = params.output_path;
@@ -72,8 +72,10 @@ function main() {
 
     let win = ImageWindow.activeWindow;
     if (!win.isNull) {
-        let base = outputPath.toLowerCase().endsWith(".fits") ? outputPath.slice(0, -5) : outputPath;
-        let finalPath = base + ".fits";
+        let finalPath = outputPath;
+        if (!finalPath.toLowerCase().endsWith(".fits") && !finalPath.toLowerCase().endsWith(".xisf")) {
+            finalPath += ".xisf";
+        }
 
         console.writeln("Saving integrated image to: " + finalPath);
         win.saveAs(
@@ -83,6 +85,8 @@ function main() {
             false,         // strict image writing mode
             false           // overwrite protection
         );
+
+        win.close();
 
     } else {
         throw new Error("No active image window after ImageIntegration — integration likely failed.");
