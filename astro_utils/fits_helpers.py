@@ -268,24 +268,29 @@ def _safe_cast_int(v):
     except Exception:
         return None
 
-def parse_date_from_header(path: Path, fmt: str = "auto"):
+def parse_date_from_header(path: Path=None, hdr=None, fmt: str = "auto"):
     """
     Extract observing date from DATE-LOC or DATE-OBS.
-    Returns datetime.date or None.
+    Returns datetime.date or None.ne
     """
-    hdr = read_image_header_info(path, fmt=fmt)
+    if hdr is None:
+        hdr = read_image_header_info(path, fmt=fmt)
     date_str = hdr.get("DATE-LOC") or hdr.get("DATE-OBS")
+    print(date_str)
     if not date_str:
         return None
 
     # Common FITS format: 2025-10-08T23:14:02
-    for fmt_str in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S").date()
+    except Exception:
         try:
-            return datetime.strptime(date_str, fmt_str).date()
-        except Exception:
-            continue
+            base, frac = date_str.split(".")
+            cleanedstr = f'{base}.{frac[:6]}'  # keep microseconds
+            return datetime.strptime(cleanedstr, "%Y-%m-%dT%H:%M:%S.%f").date()
+        except Exception as e:
+            logger.error("Failed to parse date string %r with format %r: %s", date_str, "%Y-%m-%dT%H:%M:%S.%f", e)
 
-    logger.error("Failed to parse date string %r in %s", date_str, path)
     return None
 
 # SUPERSEDED BY parse_date_from_header. Will soon be deprecated.
@@ -382,6 +387,49 @@ def group_images_by_metadata(
 
     return groups
 
+## == master index rows (shared by the parquet index and skystack.db) == ##
+MASTER_INDEX_COLUMNS = ["path", "fmt", "type", "date", "filter", "gain", "offset", "exptime", "temp", "rot"]
+
+
+def _parse_header_date(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%f").date()
+    except ValueError:
+        ts = pd.to_datetime(value, errors="coerce")
+        return None if pd.isna(ts) else ts.date()
+
+
+def master_index_row(master_file: Path, type: str = None) -> dict:
+    """Header metadata of one master calibration frame, as an index row.
+    Raises RuntimeError if the header can't be read."""
+    is_xisf = master_file.suffix.lower() == ".xisf"
+    try:
+        hdr = read_image_header_info(master_file, fmt="xisf" if is_xisf else "fits")
+    except Exception as e:
+        raise RuntimeError(f"Failed to read header for {master_file}: {e}") from e
+
+    date = (_parse_header_date(hdr.get("DATE-LOC")) or _parse_header_date(hdr.get("DATE-OBS"))
+            or parse_date_from_master_path(master_file))
+    return {
+        "path": str(master_file),
+        "fmt": master_file.suffix.lower().lstrip("."),
+        "type": type or str(hdr.get("IMAGETYP", "")).lower(),   # "master flat", "master dark", etc.
+        "date": pd.to_datetime(date, errors="coerce"),
+        "filter": hdr.get("FILTER"),
+        "gain": _safe_cast_int(hdr.get("GAIN")),
+        "offset": _safe_cast_int(hdr.get("OFFSET")),
+        "exptime": _safe_cast_float(hdr.get("EXPTIME")),
+        "temp": _safe_cast_float(hdr.get("SET-TEMP")),
+        "rot": _safe_cast_float(hdr.get("ROTATANG")),
+    }
+
+
+def list_master_files(master_dir: Path) -> list:
+    """Master frames directly inside master_dir (not subfolders)."""
+    return sorted(p for p in Path(master_dir).glob("*")
+                  if p.is_file() and p.suffix.lower() in (".fits", ".xisf"))
 
 
 ## == create index parquet file == ##
@@ -389,56 +437,24 @@ def build_master_index_parquet(
     master_dir: Path,
     out_parquet: Path,
     type:str,
-    verbose: bool = False
+    verbose: bool = False,
 ):
     """
     Build a Parquet index of master calibration frames using headers only.
     This is meant to be run rarely (or cached).
+    
+    If append is True, it will append to an existing Parquet file if it exists.
     """
 
     rows = []
-
+    files = list_master_files(master_dir)
     if verbose:
         print(f"Building master index from {master_dir}...")
-        nfiles = sum(1 for p in master_dir.rglob("*") if p.is_file() and p.suffix.lower() in (".fits", ".xisf"))
-        print(f"Found {nfiles} files to process.")
-        i = 0
-    for p in master_dir.glob("*"):
-        if not p.is_file():
-            continue
-        if p.suffix.lower() not in (".fits", ".xisf"):
-            continue
-        
+        print(f"Found {len(files)} files to process.")
+    for i, p in enumerate(files, 1):
         if verbose:
-            i += 1 
-            print(f"Processing file {i}/{nfiles}: {p}" + " " * 20, end="\r")
-
-        is_xisf = p.suffix.lower() == ".xisf"
-
-        try:
-            hdr = read_image_header_info(p, fmt="xisf" if is_xisf else "fits")
-        except Exception as e:
-            raise RuntimeError(f"Failed to read header for {p}, skipping. Error: {e}")
-            continue
-        
-        dateloc = datetime.strptime(hdr.get("DATE-LOC"), "%Y-%m-%dT%H:%M:%S.%f").date() if hdr.get("DATE-LOC") else None
-        dateobs = datetime.strptime(hdr.get("DATE-OBS"), "%Y-%m-%dT%H:%M:%S.%f").date() if hdr.get("DATE-OBS") else None
-        
-        rows.append({
-            "path": str(p),
-            "fmt": p.suffix.lower().lstrip("."),
-            "type": type or str(hdr.get("IMAGETYP", "")).lower(),   # "master flat", "master dark", etc.
-            "date": pd.to_datetime(
-                                    dateloc or dateobs or parse_date_from_master_path(p),
-                                    errors="coerce"
-                                ),
-            "filter": hdr.get("FILTER"),
-            "gain": _safe_cast_int(hdr.get("GAIN")),
-            "offset": _safe_cast_int(hdr.get("OFFSET")),
-            "exptime": _safe_cast_float(hdr.get("EXPTIME")),
-            "temp": _safe_cast_float(hdr.get("SET-TEMP")),
-            "rot": _safe_cast_float(hdr.get("ROTATANG")),
-        })
+            print(f"Processing file {i}/{len(files)}: {p}" + " " * 20, end="\r")
+        rows.append(master_index_row(p, type))
 
     df = pd.DataFrame(rows)
 
@@ -459,7 +475,27 @@ def build_master_index_parquet(
         print("Master index written.")
     return df
 
+## appending to existing parquet file to avoid re-reading all files
+def append_to_master_index_parquet(
+    parquet_path: Path,
+    master_file: Path,
+    type:str
+):
+    """
+    Append a single master file's metadata to an existing Parquet index.
+    """
+    if not parquet_path.exists():
+        # If the Parquet file doesn't exist, create it with the single entry
+        build_master_index_parquet(master_file.parent, parquet_path, type=type)
+        return
 
+    # Read existing Parquet
+    df_existing = pd.read_parquet(parquet_path)
+
+    new_rows = master_index_row(master_file, type)
+    df_existing = pd.concat([df_existing, pd.DataFrame([new_rows])], ignore_index=True)
+    # Write back to Parquet
+    df_existing.to_parquet(parquet_path, index=False)
 
 def _make_group_key(base_key: str, members: list):
     dates = sorted(set(str(m.get("date")) for m in members))

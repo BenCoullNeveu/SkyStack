@@ -1,6 +1,7 @@
 # shares the master lights of a target in the shared directory
 
 from pathlib import Path
+import shutil
 import yaml
 from astro_utils.fits_helpers import xisf2fits, fits2xisf
 from astro_utils.file_ops import safe_copy
@@ -150,9 +151,25 @@ def create_summary(target_name: str, shared_dir: Path, log_dir: Path, combine_lo
                             f.write(f"{filter},{exposure},{binning},{rejection_method},{num_frames},{int_time:.2f},{date_created}\n")
         f.write(f"\n# TOTAL INTEGRATION TIME: {total_integration:.2f} hrs\n")
 
+
+def compressFiles(directory:Path):
+    """
+    Compresses the specified folder into a zip file. Will save this ZIP file in that directory with the same name.
+
+    Parameters:
+    - directory: Path to the folder to be compressed.
+    """
+    foldername = directory.name
+    zip_path = directory / foldername
+    print(f"Compressing {directory} into {zip_path}.zip", end=' --- ')
+    shutil.make_archive(str(directory), 'zip', str(directory))
+    shutil.move(str(directory) + ".zip", str(zip_path) + ".zip")
+    print(f"Done. Created {zip_path}.zip")
+    
 if __name__ == "__main__":
     for target in TARGETS:
         print("--------------------------------")
         print(f"Processing target: {target}")
         share_master_lights(target, SHARED_DIR, MASTERS_DIR / target / "master", output_format=OUTPUT_FORMAT, exclude_drizzled=EXCLUDE_DRIZZLED, overwrite=OVERWRITE_SHARED)
         create_summary(target, SHARED_DIR / target, MASTERS_DIR / target / "logs", combine_logs=COMBINE_LOGS)
+        compressFiles(SHARED_DIR / target)

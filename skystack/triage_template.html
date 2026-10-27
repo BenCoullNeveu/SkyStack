@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+  :root {
+    --bg: #0b0d10; --panel: #14181d; --line: #262c33; --text: #d8dde3;
+    --muted: #8a94a0; --accent: #6cb6ff; --reject: #ff5c5c; --keep: #5fd38d;
+    --bar: #3d5a78; --bar-fail: #6b3b3f; --grid: #222a32;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  /* minmax(0, …) tracks stop the thumbnail strip's content width (or a large preview)
+     from stretching the page; the strip scrolls inside its own box instead. */
+  body { display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr); overflow: hidden; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+    padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .sub { color: var(--muted); }
+  .spacer { flex: 1; }
+  .counts b { font-variant-numeric: tabular-nums; }
+  .counts .k { color: var(--keep); } .counts .r { color: var(--reject); }
+  input, select, button { font: inherit; color: var(--text); background: #0f1317;
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; }
+  input[type=checkbox] { padding: 0; accent-color: var(--accent); }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); color: #06121f; border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  /* image stage + selector panel side by side; the panel sits outside the zoomed stage */
+  .work { display: grid; grid-template-columns: minmax(0, 1fr) 330px; min-height: 0; }
+  .work.nopanel { grid-template-columns: minmax(0, 1fr); }
+  .work.nopanel #panel { display: none; }
+  main { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center;
+    touch-action: none; min-width: 0; }
+  #view { max-width: 100%; max-height: 100%; object-fit: contain; image-rendering: auto;
+    transform-origin: 0 0; user-select: none; -webkit-user-drag: none; cursor: zoom-in; }
+  main.zoomed #view { max-width: none; max-height: none; cursor: grab; }
+  main.zoomed.panning #view { cursor: grabbing; }
+  main.rejected::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+    box-shadow: inset 0 0 0 4px var(--reject); }
+  .label { position: absolute; left: 12px; top: 10px; right: 12px; width: fit-content; max-width: calc(100% - 24px);
+    padding: 6px 10px; border-radius: 6px; background: rgba(11,13,16,.78);
+    font-variant-numeric: tabular-nums; pointer-events: none; }
+  .label .state { font-weight: 700; margin-left: 8px; }
+  .label .state.r { color: var(--reject); } .label .state.k { color: var(--keep); }
+  .label .why { color: var(--muted); margin-left: 6px; }
+
+  #panel { background: var(--panel); border-left: 1px solid var(--line); padding: 12px 14px;
+    overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+  #panel h2 { font-size: 13px; margin: 0; font-weight: 600; }
+  #panel .muted { color: var(--muted); font-size: 12px; }
+  #panel .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #panel select { flex: 1; min-width: 0; }
+  #panel input[type=number] { width: 96px; }
+  #hist { width: 100%; height: auto; display: block; cursor: crosshair; touch-action: none; }
+  #hist text { fill: var(--muted); font: 10px system-ui, sans-serif; }
+  #hist .cur { fill: var(--accent); }
+  #hist .curline { stroke: var(--accent); stroke-width: 2; }
+  #hist .cut { stroke: var(--reject); stroke-width: 2; stroke-dasharray: 4 3; }
+  #hist .axis { stroke: var(--line); }
+  .tip { position: fixed; pointer-events: none; background: #0f1317; border: 1px solid var(--line);
+    border-radius: 6px; padding: 4px 8px; font-size: 12px; display: none; z-index: 5; }
+  .thisframe { font-variant-numeric: tabular-nums; }
+  .thisframe .fail { color: var(--reject); } .thisframe .ok { color: var(--keep); }
+  #cutlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  #cutlist li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px;
+    border: 1px solid var(--line); border-radius: 6px; cursor: pointer; font-variant-numeric: tabular-nums; }
+  #cutlist li.sel { border-color: var(--accent); }
+
+  footer { background: var(--panel); border-top: 1px solid var(--line); min-width: 0; }
+  #strip { display: flex; gap: 4px; overflow-x: auto; padding: 6px 8px; scrollbar-width: thin; }
+  #strip .t { flex: 0 0 auto; position: relative; border: 2px solid transparent; border-radius: 4px;
+    cursor: pointer; background: #000; }
+  #strip .t img { display: block; height: 64px; border-radius: 2px; }
+  #strip .t.cur { border-color: var(--accent); }
+  #strip .t.rej img { opacity: .35; }
+  #strip .t.rej::after { content: "✕"; position: absolute; inset: 0; display: grid; place-items: center;
+    color: var(--reject); font-size: 26px; font-weight: 700; }
+  #strip .t.bymetric::before { content: "M"; position: absolute; right: 2px; bottom: 1px; z-index: 1;
+    font: 700 10px ui-monospace, monospace; color: var(--reject); background: rgba(0,0,0,.7); padding: 0 2px; border-radius: 2px; }
+  .help { color: var(--muted); padding: 0 16px 6px; font-size: 12px; }
+  kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px;
+    font: 11px ui-monospace, monospace; color: var(--text); }
+
+  dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px; max-width: min(560px, calc(100vw - 32px)); }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  dialog h2 { margin: 0 0 10px; font-size: 16px; }
+  dialog table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; margin: 8px 0 12px; }
+  dialog th, dialog td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+  dialog th:first-child, dialog td:first-child { text-align: left; }
+  dialog .buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+  dialog .status { margin-top: 8px; }
+  .done { position: fixed; inset: 0; display: none; place-items: center; background: var(--bg); z-index: 10;
+    text-align: center; padding: 24px; }
+  @media (max-width: 900px) {
+    .work { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+    #panel { border-left: 0; border-top: 1px solid var(--line); max-height: 42vh; }
+  }
+  @media (max-width: 640px) { #strip .t img { height: 48px; } .help { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1 id="title"></h1>
+    <div class="sub" id="subtitle"></div>
+  </div>
+  <div class="counts" aria-live="polite">
+    <b class="k" id="nKeep">0</b> kept · <b class="r" id="nRej">0</b> rejected
+    (<span id="nRejM">0</span> by metrics) · <b id="nTot">0</b> frames
+  </div>
+  <div class="spacer"></div>
+  <label>Filter <select id="filter"><option value="">All</option></select></label>
+  <label><input type="checkbox" id="skipRej"> Blink skips rejected</label>
+  <label id="reviewerWrap">Your name <input id="reviewer" size="12" autocomplete="name"></label>
+  <button id="togglePanel" title="Show/hide the subframe selector (M)">Selector</button>
+  <button class="primary" id="finish">Download decisions</button>
+</header>
+<div class="work" id="work">
+  <main id="stage">
+    <img id="view" alt="">
+    <div class="label" id="label"></div>
+  </main>
+  <aside id="panel" aria-label="Subframe selector">
+    <div>
+      <h2>Subframe selector</h2>
+      <div class="muted" id="groupInfo"></div>
+    </div>
+    <div class="row">
+      <select id="metric" aria-label="Metric"></select>
+    </div>
+    <svg id="hist" viewBox="0 0 300 170" role="img" aria-label="Histogram of the selected metric"></svg>
+    <div class="thisframe" id="thisFrame"></div>
+    <div class="row">
+      <label><input type="checkbox" id="cutOn"> <span id="cutDir">Reject above</span></label>
+      <input type="number" id="cutValue" step="any" aria-label="Cut value">
+      <button id="suggest" title="Median ± 3 robust sigma">Suggest</button>
+    </div>
+    <div class="muted">Click or drag on the plot to place the cut. Cuts apply to this filter/exposure group;
+      press <kbd>X</kbd> on a frame to keep it anyway.</div>
+    <div>
+      <h2>Cuts in this group</h2>
+      <ul id="cutlist"></ul>
+      <div class="muted" id="cutTotal"></div>
+    </div>
+  </aside>
+</div>
+<footer>
+  <div id="strip" role="listbox" aria-label="Frames"></div>
+  <div class="help" id="help">
+    <kbd>←</kbd>/<kbd>→</kbd> previous/next · <kbd>X</kbd> or <kbd>Del</kbd> reject/keep ·
+    <kbd>Space</kbd> play/pause blink · <kbd>+</kbd>/<kbd>−</kbd> blink speed ·
+    scroll or click to zoom, drag to pan, <kbd>Z</kbd> zoom in, <kbd>0</kbd>/<kbd>Esc</kbd> fit ·
+    <kbd>M</kbd> selector, <kbd>[</kbd>/<kbd>]</kbd> metric · every frame is kept unless you or a cut rejects it ·
+    <span id="helpFinish">when you're done, click <b>Download decisions</b> and send the file back.</span>
+  </div>
+</footer>
+<div class="tip" id="tip"></div>
+<dialog id="confirm">
+  <h2 id="confirmTitle">Finish review?</h2>
+  <div id="confirmBody"></div>
+  <div class="status muted" id="confirmStatus"></div>
+  <div class="buttons">
+    <button id="confirmCancel">Back to review</button>
+    <button class="primary" id="confirmOk">Confirm</button>
+  </div>
+</dialog>
+<div class="done" id="done"><div><h2 id="doneTitle">Saved</h2><p class="muted" id="doneText"></p></div></div>
+<script>
+const DATA = /*__DATA__*/null;
+const STORE_KEY = "skystack-triage-" + DATA.session_id;
+const LOCAL = DATA.local || null;            // set when served by `run_routine.py triage --local`
+const frames = DATA.frames;
+const SPEC = (DATA.metric_spec || []).filter(m => frames.some(f => f.metrics && f.metrics[m.key] != null));
+const SPEC_BY_KEY = Object.fromEntries(SPEC.map(m => [m.key, m]));
+
+const overrides = new Map();   // key -> "keep" | "reject"  (manual decisions, win over cuts)
+let cuts = {};                 // group -> metric -> {on, value}
+let order = frames.map((_, i) => i);   // indices visible under the current filter
+let pos = 0, timer = null, speedMs = 400, dirty = false;
+let metricKey = SPEC.length ? (SPEC.find(m => m.key === "fwhm") || SPEC[0]).key : null;
+
+const $ = id => document.getElementById(id);
+const view = $("view"), stage = $("stage");
+
+// ---- groups (metrics only compare within a filter + exposure) ----------------
+function fmtExp(v) { const n = parseFloat(v); return isFinite(n) ? n + "s" : ""; }
+function groupOf(f) { return [f.filter || "no filter", fmtExp(f.exptime)].filter(Boolean).join(" · "); }
+const groups = {};
+frames.forEach((f, i) => { (groups[groupOf(f)] = groups[groupOf(f)] || []).push(i); });
+function metricValue(f, key) { const v = f.metrics ? f.metrics[key] : null; return v == null || !isFinite(v) ? null : +v; }
+
+function fmt(v) {
+  if (v == null || !isFinite(v)) return "—";
+  const a = Math.abs(v);
+  return a >= 100 ? v.toFixed(0) : a >= 10 ? v.toFixed(1) : a >= 1 ? v.toFixed(2) : v.toPrecision(3);
+}
+
+// ---- decisions ---------------------------------------------------------------
+function cutFailures(f) {
+  const g = cuts[groupOf(f)] || {}, out = [];
+  for (const [key, c] of Object.entries(g)) {
+    if (!c.on || c.value == null || !SPEC_BY_KEY[key]) continue;
+    const v = metricValue(f, key);
+    if (v == null) continue;
+    const low = SPEC_BY_KEY[key].better === "low";
+    if (low ? v > c.value : v < c.value)
+      out.push(`${SPEC_BY_KEY[key].label} ${fmt(v)} ${low ? ">" : "<"} ${fmt(c.value)}`);
+  }
+  return out;
+}
+function isRejected(f) {
+  const o = overrides.get(f.key);
+  return o ? o === "reject" : cutFailures(f).length > 0;
+}
+function rejectedByMetrics(f) { return !overrides.has(f.key) && cutFailures(f).length > 0; }
+
+function load() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+    if (!saved) return;
+    (saved.rejected || []).forEach(k => overrides.set(k, "reject"));   // version-1 storage
+    Object.entries(saved.overrides || {}).forEach(([k, v]) => overrides.set(k, v));
+    cuts = saved.cuts || {};
+    $("reviewer").value = saved.reviewer || "";
+    if (saved.metric && SPEC_BY_KEY[saved.metric]) metricKey = saved.metric;
+  } catch (e) { /* storage unavailable: start fresh */ }
+}
+function save() {
+  dirty = true;
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify({ overrides: Object.fromEntries(overrides), cuts,
+      reviewer: $("reviewer").value, metric: metricKey }));
+  } catch (e) { /* storage unavailable: decisions still live in this tab */ }
+}
+
+// ---- strip + main view -------------------------------------------------------
+function buildStrip() {
+  const strip = $("strip");
+  strip.innerHTML = "";
+  order.forEach((fi, p) => {
+    const f = frames[fi];
+    const d = document.createElement("div");
+    d.className = "t"; d.dataset.p = p; d.setAttribute("role", "option");
+    d.title = f.name;
+    if (f.thumb) { const im = document.createElement("img"); im.src = "data:image/jpeg;base64," + f.thumb; im.alt = ""; d.appendChild(im); }
+    else { d.textContent = "!"; d.style.padding = "20px 12px"; }
+    d.onclick = () => go(p);
+    strip.appendChild(d);
+  });
+}
+
+function render() {
+  if (!order.length) { view.removeAttribute("src"); $("label").textContent = "No frames in this filter"; renderPanel(); return; }
+  const f = frames[order[pos]];
+  const isRej = isRejected(f), fails = cutFailures(f), o = overrides.get(f.key);
+  if (f.img) {
+    const src = "data:image/jpeg;base64," + f.img;
+    if (view.src !== src) view.src = src;   // don't re-decode on zoom/pan re-renders
+    view.alt = f.name;
+  }
+  else { view.removeAttribute("src"); view.alt = "Preview failed: " + (f.error || ""); }
+  stage.classList.toggle("rejected", isRej);
+  $("label").innerHTML = "";
+  const meta = [f.filter, fmtExp(f.exptime), f.date ? f.date.replace("T", " ").slice(0, 19) : "",
+                zoomLabel()].filter(Boolean).join(" · ");
+  $("label").append(`${pos + 1} / ${order.length}  ${f.name}  ${meta ? "· " + meta : ""}`);
+  const st = document.createElement("span");
+  st.className = "state " + (isRej ? "r" : "k"); st.textContent = isRej ? "REJECTED" : "KEEP";
+  $("label").appendChild(st);
+  const why = document.createElement("span"); why.className = "why";
+  why.textContent = o === "reject" ? "(by you)" : o === "keep" && fails.length ? `(kept by you despite ${fails.join(", ")})`
+    : fails.length ? `(${fails.join(", ")})` : "";
+  $("label").appendChild(why);
+  document.querySelectorAll("#strip .t").forEach(el => {
+    const p = +el.dataset.p, fr = frames[order[p]];
+    el.classList.toggle("cur", p === pos);
+    el.classList.toggle("rej", isRejected(fr));
+    el.classList.toggle("bymetric", rejectedByMetrics(fr));
+    el.setAttribute("aria-selected", p === pos);
+  });
+  const cur = document.querySelector("#strip .t.cur");
+  if (cur) cur.scrollIntoView({ block: "nearest", inline: "nearest" });
+  const nRej = frames.filter(isRejected).length;
+  $("nRej").textContent = nRej;
+  $("nRejM").textContent = frames.filter(rejectedByMetrics).length;
+  $("nKeep").textContent = frames.length - nRej;
+  renderPanel();
+}
+
+function go(p) { if (!order.length) return; pos = (p + order.length) % order.length; render(); }
+function step(dir) {
+  // while blinking with "skip rejected", jump over rejected frames (unless all are rejected)
+  if (!$("skipRej").checked || !order.length) return go(pos + dir);
+  for (let n = 1; n <= order.length; n++) {
+    const p = (pos + dir * n + order.length * n) % order.length;
+    if (!isRejected(frames[order[p]])) return go(p);
+  }
+  go(pos + dir);
+}
+function toggle() {
+  if (!order.length) return;
+  const f = frames[order[pos]];
+  const want = isRejected(f) ? "keep" : "reject";
+  const byCuts = cutFailures(f).length > 0 ? "reject" : "keep";
+  want === byCuts ? overrides.delete(f.key) : overrides.set(f.key, want);
+  save(); render();
+}
+function play() {
+  if (timer) { clearInterval(timer); timer = null; return; }
+  timer = setInterval(() => step(1), speedMs);
+}
+function setSpeed(ms) { speedMs = Math.max(60, Math.min(3000, ms)); if (timer) { clearInterval(timer); timer = null; play(); } }
+
+function applyFilter() {
+  const v = $("filter").value;
+  order = frames.map((f, i) => i).filter(i => !v || String(frames[i].filter) === v);
+  pos = 0; unzoom(); buildStrip(); render();
+}
+
+// ---- subframe selector panel -------------------------------------------------
+const H = { w: 300, h: 170, l: 30, r: 8, t: 8, b: 26 };   // svg geometry (viewBox units)
+let histModel = null;   // what the current plot shows, for hit-testing
+
+function robustSuggest(values, better) {
+  const v = values.slice().sort((a, b) => a - b);
+  if (!v.length) return null;
+  const med = v[Math.floor(v.length / 2)];
+  const dev = v.map(x => Math.abs(x - med)).sort((a, b) => a - b);
+  const sigma = 1.4826 * dev[Math.floor(dev.length / 2)];
+  return better === "low" ? med + 3 * sigma : med - 3 * sigma;
+}
+function currentCut(group) { return ((cuts[group] || {})[metricKey]) || { on: false, value: null }; }
+function setCut(group, patch) {
+  cuts[group] = cuts[group] || {};
+  cuts[group][metricKey] = { ...currentCut(group), ...patch };
+  save(); render();
+}
+
+function renderPanel() {
+  if (!SPEC.length) { $("work").classList.add("nopanel"); $("togglePanel").disabled = true; return; }
+  if (!order.length) return;
+  const f = frames[order[pos]], group = groupOf(f), spec = SPEC_BY_KEY[metricKey];
+  const members = groups[group].map(i => frames[i]);
+  const vals = members.map(m => metricValue(m, metricKey)).filter(v => v != null);
+  $("groupInfo").textContent = `${group} · ${members.length} frames` +
+    (vals.length < members.length ? ` (${members.length - vals.length} not measured)` : "");
+
+  const cut = currentCut(group);
+  $("cutDir").textContent = spec.better === "low" ? "Reject above" : "Reject below";
+  $("cutOn").checked = !!cut.on;
+  if (document.activeElement !== $("cutValue")) $("cutValue").value = cut.value == null ? "" : +fmt(cut.value);
+
+  drawHistogram(vals, metricValue(f, metricKey), cut, spec);
+
+  const v = metricValue(f, metricKey), fails = cutFailures(f);
+  const tf = $("thisFrame"); tf.innerHTML = "";
+  if (v == null) tf.textContent = "This frame wasn't measured.";
+  else {
+    const bin = histModel && histModel.binOf(v);
+    tf.append(`This frame: ${spec.label} ${fmt(v)}`);
+    if (bin) tf.append(` · bin ${fmt(bin.lo)}–${fmt(bin.hi)} (${bin.n} frames)`);
+    const s = document.createElement("div");
+    s.className = fails.length ? "fail" : "ok";
+    s.textContent = fails.length ? "Fails: " + fails.join(", ") + (overrides.get(f.key) === "keep" ? " — kept by you" : "")
+                                 : "Passes the cuts in this group";
+    tf.appendChild(s);
+  }
+
+  // cuts in this group, with how many frames each rejects
+  const list = $("cutlist"); list.innerHTML = "";
+  const g = cuts[group] || {};
+  const active = Object.entries(g).filter(([k, c]) => c.on && c.value != null && SPEC_BY_KEY[k]);
+  for (const [k, c] of active) {
+    const low = SPEC_BY_KEY[k].better === "low";
+    const n = members.filter(m => { const x = metricValue(m, k); return x != null && (low ? x > c.value : x < c.value); }).length;
+    const li = document.createElement("li");
+    li.className = k === metricKey ? "sel" : "";
+    li.innerHTML = `<span></span><span></span>`;
+    li.children[0].textContent = `${SPEC_BY_KEY[k].label} ${low ? ">" : "<"} ${fmt(c.value)}`;
+    li.children[1].textContent = `${n} frames`;
+    li.onclick = () => { metricKey = k; $("metric").value = k; save(); render(); };
+    list.appendChild(li);
+  }
+  if (!active.length) { const li = document.createElement("li"); li.className = "muted"; li.textContent = "No cuts yet"; li.style.cursor = "default"; list.appendChild(li); }
+  const nCut = members.filter(m => cutFailures(m).length).length;
+  const nRej = members.filter(isRejected).length;
+  $("cutTotal").textContent = `${nCut} of ${members.length} fail the cuts · ${nRej} rejected in total in this group`;
+}
+
+function drawHistogram(vals, curVal, cut, spec) {
+  const svg = $("hist"), NS = "http://www.w3.org/2000/svg";
+  svg.innerHTML = "";
+  const el = (name, attrs, text) => {
+    const e = document.createElementNS(NS, name);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    if (text != null) e.textContent = text;
+    svg.appendChild(e); return e;
+  };
+  if (!vals.length) { histModel = null; el("text", { x: H.w / 2, y: H.h / 2, "text-anchor": "middle" }, "No measurements"); return; }
+
+  // range from the data only (padded), so dragging the cut doesn't rescale the axis under the pointer
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (hi === lo) { lo -= 0.5; hi += 0.5; }
+  const pad = (hi - lo) * 0.05; lo -= pad; hi += pad;
+  const nb = Math.max(8, Math.min(30, Math.round(Math.sqrt(vals.length) * 2)));
+  const width = (hi - lo) / nb;
+  const counts = new Array(nb).fill(0);
+  const idx = v => Math.min(nb - 1, Math.max(0, Math.floor((v - lo) / width)));
+  vals.forEach(v => counts[idx(v)]++);
+  const maxC = Math.max(...counts);
+  const pw = H.w - H.l - H.r, ph = H.h - H.t - H.b;
+  const x = v => H.l + (v - lo) / (hi - lo) * pw;
+  const y = c => H.t + ph - c / maxC * ph;
+  histModel = {
+    lo, hi, x, valueAt: px => lo + (px - H.l) / pw * (hi - lo),
+    binOf: v => { const i = idx(v); return { lo: lo + i * width, hi: lo + (i + 1) * width, n: counts[i] }; },
+    bins: counts.map((n, i) => ({ lo: lo + i * width, hi: lo + (i + 1) * width, n })),
+  };
+
+  // recessive grid + axes
+  [0.5, 1].forEach(fr => el("line", { x1: H.l, x2: H.w - H.r, y1: y(maxC * fr), y2: y(maxC * fr), stroke: "var(--grid)" }));
+  el("line", { x1: H.l, x2: H.w - H.r, y1: H.t + ph, y2: H.t + ph, class: "axis" });
+  el("text", { x: H.l - 4, y: y(maxC) + 3, "text-anchor": "end" }, maxC);
+  el("text", { x: H.l - 4, y: H.t + ph + 3, "text-anchor": "end" }, 0);
+  el("text", { x: H.l, y: H.h - 8, "text-anchor": "start" }, fmt(lo));
+  el("text", { x: H.w - H.r, y: H.h - 8, "text-anchor": "end" }, fmt(hi));
+  el("text", { x: (H.l + H.w - H.r) / 2, y: H.h - 8, "text-anchor": "middle" }, spec.label);
+
+  const curBin = curVal == null ? -1 : idx(curVal);
+  const low = spec.better === "low";
+  counts.forEach((n, i) => {
+    if (!n) return;
+    const bx = x(lo + i * width) + 1, bw = Math.max(1, pw / nb - 2), mid = lo + (i + 0.5) * width;
+    const failing = cut.on && cut.value != null && (low ? mid > cut.value : mid < cut.value);
+    const r = el("rect", { x: bx, y: y(n), width: bw, height: H.t + ph - y(n), rx: 2,
+      fill: i === curBin ? "var(--accent)" : failing ? "var(--bar-fail)" : "var(--bar)" });
+    r.dataset.bin = i;
+  });
+  if (curVal != null) el("line", { x1: x(curVal), x2: x(curVal), y1: H.t + ph, y2: H.t + ph + 6, class: "curline" });
+  if (cut.on && cut.value != null) {
+    if (cut.value >= lo && cut.value <= hi) el("line", { x1: x(cut.value), x2: x(cut.value), y1: H.t, y2: H.t + ph, class: "cut" });
+    else el("text", { x: cut.value < lo ? H.l + 2 : H.w - H.r - 2, y: H.t + 10,
+                      "text-anchor": cut.value < lo ? "start" : "end" }, `cut ${fmt(cut.value)} off-scale`);
+  }
+}
+
+function svgX(e) {
+  const r = $("hist").getBoundingClientRect();
+  return (e.clientX - r.left) / r.width * H.w;
+}
+let histDrag = false;
+function cutFromPointer(e) {
+  if (!histModel || !order.length) return;
+  const v = histModel.valueAt(Math.max(H.l, Math.min(H.w - H.r, svgX(e))));
+  setCut(groupOf(frames[order[pos]]), { on: true, value: +fmt(v) });
+}
+$("hist").addEventListener("pointerdown", e => { histDrag = true; $("hist").setPointerCapture(e.pointerId); cutFromPointer(e); });
+$("hist").addEventListener("pointermove", e => {
+  if (histDrag) return cutFromPointer(e);
+  const tip = $("tip");
+  if (!histModel) { tip.style.display = "none"; return; }
+  const v = histModel.valueAt(svgX(e));
+  const b = histModel.bins.find(b => v >= b.lo && v < b.hi);
+  if (!b) { tip.style.display = "none"; return; }
+  tip.textContent = `${fmt(b.lo)}–${fmt(b.hi)}: ${b.n} frames`;
+  tip.style.display = "block"; tip.style.left = (e.clientX + 12) + "px"; tip.style.top = (e.clientY - 28) + "px";
+});
+$("hist").addEventListener("pointerup", () => { histDrag = false; });
+$("hist").addEventListener("pointerleave", () => { if (!histDrag) $("tip").style.display = "none"; });
+
+$("metric").addEventListener("change", () => { metricKey = $("metric").value; save(); render(); });
+$("cutOn").addEventListener("change", () => {
+  const group = groupOf(frames[order[pos]]), cut = currentCut(group);
+  let value = cut.value;
+  if (value == null) {
+    const vals = groups[group].map(i => metricValue(frames[i], metricKey)).filter(v => v != null);
+    value = robustSuggest(vals, SPEC_BY_KEY[metricKey].better);
+  }
+  setCut(group, { on: $("cutOn").checked, value: value == null ? null : +fmt(value) });
+});
+$("cutValue").addEventListener("change", () => {
+  const v = parseFloat($("cutValue").value);
+  setCut(groupOf(frames[order[pos]]), isFinite(v) ? { on: true, value: v } : { on: false });
+});
+$("suggest").addEventListener("click", () => {
+  const group = groupOf(frames[order[pos]]);
+  const vals = groups[group].map(i => metricValue(frames[i], metricKey)).filter(v => v != null);
+  const s = robustSuggest(vals, SPEC_BY_KEY[metricKey].better);
+  if (s != null) setCut(group, { on: true, value: +fmt(s) });
+});
+function cycleMetric(dir) {
+  if (!SPEC.length) return;
+  const i = SPEC.findIndex(m => m.key === metricKey);
+  metricKey = SPEC[(i + dir + SPEC.length) % SPEC.length].key;
+  $("metric").value = metricKey; save(); render();
+}
+function togglePanel() { if (SPEC.length) { $("work").classList.toggle("nopanel"); if (!zoom) applyZoom(); } }
+$("togglePanel").addEventListener("click", togglePanel);
+
+// ---- zoom: wheel zooms around the cursor, click zooms in (or back to fit), drag pans.
+// The zoom stays put when moving between frames, so blinking compares the same spot.
+// zoom = null means "fit"; otherwise {s: screen px per preview px, x, y: image offset}.
+const MAX_ZOOM = 8, CLICK_ZOOM = 3, WHEEL_STEP = 1.25;
+let zoom = null, drag = null;
+
+function fitState() {
+  const r = stage.getBoundingClientRect();
+  const s = Math.min(r.width / view.naturalWidth, r.height / view.naturalHeight, 1);
+  return { s, x: (r.width - view.naturalWidth * s) / 2, y: (r.height - view.naturalHeight * s) / 2 };
+}
+function applyZoom() {
+  if (!zoom) {
+    stage.classList.remove("zoomed");
+    view.style.transform = view.style.position = view.style.imageRendering = "";
+  } else {
+    stage.classList.add("zoomed");
+    view.style.position = "absolute"; view.style.left = "0"; view.style.top = "0";
+    view.style.transform = `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})`;
+    view.style.imageRendering = zoom.s >= 2 ? "pixelated" : "auto";  // show real pixels on stars
+  }
+  render();
+}
+function zoomAt(clientX, clientY, newScale) {
+  if (!view.naturalWidth) return;
+  const r = stage.getBoundingClientRect(), fit = fitState(), cur = zoom || fit;
+  const px = clientX - r.left, py = clientY - r.top;
+  const ix = (px - cur.x) / cur.s, iy = (py - cur.y) / cur.s;   // preview pixel under the cursor
+  const s = Math.min(MAX_ZOOM, newScale);
+  zoom = s <= fit.s * 1.001 ? null : { s, x: px - ix * s, y: py - iy * s };
+  applyZoom();
+}
+function unzoom() { if (zoom) { zoom = null; applyZoom(); } }
+function zoomLabel() { return zoom ? `zoom ${zoom.s.toFixed(1)}×` : ""; }
+
+stage.addEventListener("wheel", e => {
+  e.preventDefault();
+  const cur = (zoom || fitState()).s;
+  zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? cur * WHEEL_STEP : cur / WHEEL_STEP);
+}, { passive: false });
+stage.addEventListener("pointerdown", e => {
+  if (e.button !== 0) return;
+  drag = { x0: e.clientX, y0: e.clientY, moved: false, zx: zoom && zoom.x, zy: zoom && zoom.y };
+  stage.setPointerCapture(e.pointerId);
+});
+stage.addEventListener("pointermove", e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+  if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+  drag.moved = true;
+  if (zoom) {
+    stage.classList.add("panning");
+    zoom.x = drag.zx + dx; zoom.y = drag.zy + dy;
+    view.style.transform = `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})`;
+  }
+});
+stage.addEventListener("pointerup", e => {
+  if (!drag) return;
+  const wasClick = !drag.moved;
+  drag = null; stage.classList.remove("panning");
+  // with pointer capture the event targets the stage, so hit-test the image itself
+  const v = view.getBoundingClientRect();
+  const onImage = e.clientX >= v.left && e.clientX <= v.right && e.clientY >= v.top && e.clientY <= v.bottom;
+  if (!wasClick || !onImage) return;
+  if (zoom) unzoom(); else zoomAt(e.clientX, e.clientY, CLICK_ZOOM);
+});
+stage.addEventListener("pointercancel", () => { drag = null; stage.classList.remove("panning"); });
+window.addEventListener("resize", () => { if (!zoom) applyZoom(); });
+
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || $("confirm").open) return;
+  switch (e.key) {
+    case "ArrowRight": case "d": go(pos + 1); break;
+    case "ArrowLeft": case "a": go(pos - 1); break;
+    case "Home": go(0); break;
+    case "End": go(order.length - 1); break;
+    case "x": case "X": case "Delete": case "Backspace": toggle(); break;
+    case " ": play(); break;
+    case "+": case "=": setSpeed(speedMs * 0.7); break;
+    case "-": case "_": setSpeed(speedMs / 0.7); break;
+    case "Escape": case "0": unzoom(); break;
+    case "m": case "M": togglePanel(); break;
+    case "[": cycleMetric(-1); break;
+    case "]": cycleMetric(1); break;
+    case "z": case "Z": {
+      const r = stage.getBoundingClientRect();
+      zoomAt(r.left + r.width / 2, r.top + r.height / 2, zoom ? zoom.s * 2 : CLICK_ZOOM);
+      break;
+    }
+    default: return;
+  }
+  e.preventDefault();
+});
+
+// ---- finishing: confirm with a per-filter summary, then download or submit ----
+function decisions() {
+  const rejected = frames.filter(isRejected);
+  const activeCuts = {};
+  for (const [g, m] of Object.entries(cuts)) {
+    const on = Object.fromEntries(Object.entries(m).filter(([k, c]) => c.on && c.value != null).map(([k, c]) => [k, c.value]));
+    if (Object.keys(on).length) activeCuts[g] = on;
+  }
+  return {
+    format: "SkyStack triage decisions", version: 2,
+    session_id: DATA.session_id, target: DATA.target,
+    reviewer: $("reviewer").value.trim() || (LOCAL ? "local" : ""),
+    created_utc: new Date().toISOString(),
+    total: frames.length, kept_count: frames.length - rejected.length,
+    discarded: rejected.map(f => f.key).sort(),
+    metric_rejected: frames.filter(rejectedByMetrics).map(f => f.key).sort(),
+    overrides: Object.fromEntries([...overrides].sort()),
+    metric_cuts: activeCuts,
+  };
+}
+function summaryTable() {
+  const by = {};
+  frames.forEach(f => {
+    const k = f.filter || "no filter";
+    const s = by[k] = by[k] || { total: 0, kept: 0, manual: 0, metric: 0 };
+    s.total++;
+    if (!isRejected(f)) s.kept++; else if (rejectedByMetrics(f)) s.metric++; else s.manual++;
+  });
+  const t = document.createElement("table");
+  t.innerHTML = "<thead><tr><th>Filter</th><th>Selected</th><th>Rejected by you</th><th>Rejected by cuts</th><th>Total</th></tr></thead><tbody></tbody>";
+  const tb = t.querySelector("tbody");
+  const tot = { total: 0, kept: 0, manual: 0, metric: 0 };
+  Object.keys(by).sort().forEach(k => {
+    const s = by[k]; Object.keys(tot).forEach(x => tot[x] += s[x]);
+    const tr = document.createElement("tr");
+    [k, s.kept, s.manual, s.metric, s.total].forEach(v => { const td = document.createElement("td"); td.textContent = v; tr.appendChild(td); });
+    tb.appendChild(tr);
+  });
+  const tr = document.createElement("tr"); tr.style.fontWeight = "600";
+  ["All", tot.kept, tot.manual, tot.metric, tot.total].forEach(v => { const td = document.createElement("td"); td.textContent = v; tr.appendChild(td); });
+  tb.appendChild(tr);
+  return t;
+}
+function openConfirm() {
+  if (timer) play();
+  const body = $("confirmBody"); body.innerHTML = "";
+  body.appendChild(summaryTable());
+  const p = document.createElement("p"); p.className = "muted";
+  p.textContent = LOCAL ? `The selected frames move on; rejected ones go to REJECTED/. Then: ${LOCAL.next_steps || "nothing else"}. This window closes.`
+                        : "A decisions file downloads. Send it back to whoever sent you this page.";
+  body.appendChild(p);
+  $("confirmTitle").textContent = LOCAL ? "Finish review and continue?" : "Download decisions?";
+  $("confirmOk").textContent = LOCAL ? "Finish & continue" : "Download";
+  $("confirmStatus").textContent = ""; $("confirmOk").disabled = false;
+  $("confirm").showModal();
+}
+function download(out) {
+  const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${DATA.target}_${DATA.session_id}_decisions.json`.replace(/[^\w.\-]+/g, "_");
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+async function confirmFinish() {
+  const out = decisions();
+  if (!LOCAL) { download(out); dirty = false; $("confirm").close(); return; }
+  $("confirmOk").disabled = true; $("confirmStatus").textContent = "Saving…";
+  try {
+    const r = await fetch(LOCAL.submit_url, { method: "POST", headers: { "Content-Type": "application/json" },
+                                              body: JSON.stringify(out) });
+    const reply = await r.json().catch(() => ({}));
+    if (!r.ok || !reply.ok) throw new Error(reply.error || `HTTP ${r.status}`);
+    dirty = false;
+    try { localStorage.removeItem(STORE_KEY); } catch (e) {}
+    $("confirm").close();
+    $("doneText").textContent = `Continuing: ${LOCAL.next_steps || "done"}. You can close this window.`;
+    $("done").style.display = "grid";
+    setTimeout(() => window.close(), 900);
+  } catch (e) {
+    $("confirmOk").disabled = false;
+    $("confirmStatus").textContent = "Couldn't reach SkyStack (" + e.message + "). Is the job still running? " +
+      "You can also download the decisions and apply them from the dashboard.";
+    const b = document.createElement("button"); b.textContent = "Download instead";
+    b.onclick = () => { download(out); dirty = false; };
+    $("confirmStatus").appendChild(document.createElement("br")); $("confirmStatus").appendChild(b);
+  }
+}
+$("finish").addEventListener("click", openConfirm);
+$("confirmCancel").addEventListener("click", () => $("confirm").close());
+$("confirmOk").addEventListener("click", confirmFinish);
+$("reviewer").addEventListener("input", save);
+$("filter").addEventListener("change", applyFilter);
+window.addEventListener("beforeunload", e => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+
+// ---- init ----------------------------------------------------------------------
+$("title").textContent = DATA.target;
+$("subtitle").textContent = [DATA.session_label, "package " + DATA.session_id].filter(Boolean).join(" · ");
+$("nTot").textContent = frames.length;
+[...new Set(frames.map(f => f.filter).filter(v => v != null))].sort().forEach(v => {
+  const o = document.createElement("option"); o.value = String(v); o.textContent = v; $("filter").appendChild(o);
+});
+SPEC.forEach(m => { const o = document.createElement("option"); o.value = m.key; o.textContent = m.label; $("metric").appendChild(o); });
+if (LOCAL) {
+  $("finish").textContent = "Finish review";
+  $("reviewerWrap").style.display = "none";
+  $("helpFinish").innerHTML = "when you're done, click <b>Finish review</b> to continue the pipeline.";
+}
+load();
+if (metricKey) $("metric").value = metricKey;
+if (!SPEC.length) $("work").classList.add("nopanel");
+buildStrip();
+render();
+</script>
+</body>
+</html>

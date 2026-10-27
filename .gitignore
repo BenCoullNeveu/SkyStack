@@ -61,6 +61,18 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
+# SkyStack generated database (rebuilt by skystack_db.py refresh_all_targets)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# QuickBlink review sessions launched from the UI (ephemeral working files)
+/quickblink_sessions/
+
+# Pipeline jobs launched from the dashboard (status + logs)
+/pipeline_jobs/
+
 # Flask stuff:
 instance/
 .webassets-cache

@@ -13,6 +13,13 @@ logger.setLevel(LOG_LEVEL)
 # --- Paths ---
 BASE_DIR = Path(config.get("dark_base_dir"))
 MASTER_OUTPUT = Path(config.get("dark_master_output"))
+DARK_INDEX_PATH = BASE_DIR / config.get("dark_index_file")
+
+# To append or not
+# Only the legacy parquet index is appended to here; with master_index "db"
+# new masters are picked up by the skystack.db sync that follows stacking.
+APPEND_TO_INDEX = (str(config.get("master_index", "db")).lower() == "parquet"
+                   and not config.get("create_index_files", False))
 
 # FITS keywords
 HEADER_GAIN_KEY = config.get("header_gain_key", "GAIN")
@@ -44,4 +51,7 @@ master_name_fmt = {
 stack(groups, MASTER_OUTPUT, "dark", master_name_fmt,
       max_days_diff=MAX_DAYS_DIFF,
       instance=PIXINSIGHT_INSTANCE, 
-      exit_instance=EXIT_INSTANCE)
+      exit_instance=EXIT_INSTANCE,
+      update_index=APPEND_TO_INDEX,
+      index_path=DARK_INDEX_PATH,
+      type="DARK")

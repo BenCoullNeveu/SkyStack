@@ -6,8 +6,7 @@ from astro_utils.fits_helpers import fits2xisf
 
 
 DIRECTORIES = [
-    "D:/Astrophotography/SkyShare Data/MASTERS/FLAT",
-    'D:/Astrophotography/SkyShare Data/MASTERS/DARK'
+    r"D:\Dropbox\SKYSHARE\CLIENT DATA\North America Nebula Ross Wynne\RAWS\masterCalibrationFiles",
 ]
 
 for directory in DIRECTORIES:
@@ -15,6 +14,6 @@ for directory in DIRECTORIES:
     ensure_dir(dir_path)
     for fits_file in dir_path.rglob("*.fits"):
         print(f"Converting {fits_file}...")
-        xif_file = fits_file.with_suffix(".xisf")
+        xisf_file = fits_file.with_suffix(".xisf")
         # input("Press Enter to continue...")
-        fits2xisf(fits_file, xif_file, delete_after_convert=False)
+        fits2xisf(fits_file, xisf_file, delete_after_convert=False)

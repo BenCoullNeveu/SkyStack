@@ -1,21 +1,19 @@
 # === General Settings ===
 pixinsight_cli_path: 'C:/Program Files/PixInsight/bin/PixInsight.exe'  # Path to PixInsight CLI executable
-log_level: 'DEBUG'  # DEBUG, INFO, WARNING, ERROR
+log_level: 'INFO'  # DEBUG, INFO, WARNING, ERROR
 pixinsight_instance: 2
 exit_instance: true
+# GPU for the PixInsight instance the pipeline launches (BlurXTerminator & co. use TensorFlow).
+# auto: use it unless another PixInsight is running and less than pixinsight_gpu_min_free_mb is
+# free -- TensorFlow in that other instance holds the GPU and a second one stalls initializing.
+pixinsight_gpu: auto  # auto | on | off (off = CPU, slower but never stalls)
+pixinsight_gpu_min_free_mb: 2048
+master_index: db  # db: master flat/dark metadata lives in skystack.db, synced incrementally | parquet: legacy master_index.parquet files
+create_index_files: true # parquet only: rebuild the index files after stacking (false = append to them)
 
 # === MASTER LIGHT SHARING ===
 targets_to_share: # List of target names to share master lights for. Empty list means share all.
-  # - WR-134
-  # - M 31
-  # - Orion
-  # - NGC 7000
-  # - Cone Nebula
-  # - Bubble Widefield
-  # - Cocoon Nebula
-  # - Leo Triplet
-  # - M 38
-  - NGC 6888
+  - M33 Khalid
 # shared_dir: 'D:\\Dropbox\\SKYSHARE\\READY TO SELL'  # Directory to share master lights
 # shared_dir: 'D:\\Dropbox\\SKYSHARE\\SELLABLE BUT NEEDS MORE DATA'  # Directory to share master lights
 # shared_dir: 'D:\\Dropbox\\SKYSHARE\\TO PROCESS'  # Directory to share master lights
@@ -50,6 +48,7 @@ dark_keywords:
   offset_key: "OFFSET"
   exposure_key: "EXPTIME"
   temperature_key: "CCD-TEMP"
+dark_index_file: "master_index.parquet"
 
 # === Auto-FLAT Stacking ===
 flat_base_dir: 'D:\Astrophotography\SkyShare Data\FLAT'  # Base directory for dark frames
@@ -62,13 +61,14 @@ flat_keywords:
   gain_key: "GAIN"
   offset_key: "OFFSET"
   exposure_key: "EXPTIME"
+flat_index_file: "master_index.parquet"
 
 # === Image Calibration ===
-target_name: 'NGC 6888'  # Name of the target to process
+target_name: M 33  # Name of the target to process
 light_base_dir: 'D:\Astrophotography\SkyShare Data\LIGHT'
 calibrated_output_dir: 'D:\Astrophotography\SkyShare Data\CALIBRATED'
-calibration_search_days_flat: 60  # ± days to find matching flats. None to ignore date
-calibration_search_months_dark: 14  # ± months to find matching darks. None to ignore date
+calibration_search_days_flat: 30  # ± days to find matching flats. None to ignore date
+calibration_search_months_dark: 7  # ± months to find matching darks. None to ignore date
 only_plot: false  # If true, only generate plots without calibrating
 
 # === FITS Header Keywords ===
@@ -86,7 +86,87 @@ rotation_tolerance: 0.5  # degrees
 temp_tolerance: 1.0  # degrees Celsius
 
 
-### === Triage settings ===
+# === Pipeline: registration -> triage -> stacking -> export (run_routine.py) ===
+registered_output_dir: 'D:/Astrophotography/SkyShare Data/REGISTERED'  # REGISTERED/<target>/{reference,registered,BLINKED,REJECTED,master,...}
+
+platesolve:
+  astap_path: 'C:/Program Files/astap/astap_cli.exe'
+  search_radius_deg: 10   # search radius around the header RA/DEC
+  workers: 4              # ASTAP processes in parallel
+  timeout_s: 120
+
+registration:
+  canvas: union             # union (all data, ragged edges) | intersection (area every frame covers)
+  reference_frame: null     # set to a light's path/file name to register against it instead of the canvas
+  preferred_filters: [L]    # the canvas reference is drawn from these filters when present (most stars)
+  distortion_correction: true
+
+remote_access:              # the dashboard for collaborators over Tailscale (python skystack_server.py; README "Remote access")
+  enabled: true
+  owners: []                # your own Tailscale login(s), for when you connect from another device (local access is always owner)
+  collaborators: {
+    test@example.com: {auto_run: true}
+  }         # Tailscale login: {auto_run: true|false}; false = you approve each of their jobs
+  windows:                  # local time, when collaborators can connect and their jobs can start; end before start = past midnight
+    - {days: all, start: "22:00", end: "07:00"}   # days: all, or e.g. [fri, sat]
+  manage_tailscale_serve: false   # true: publish on the tailnet only while open (then owners also only reach it in the window)
+  dashboard_port: 8501
+  triage_port: 8502
+
+measurement:               # PixInsight SubframeSelector metrics, measured on calibrated frames before triage
+  subframe_scale: 1.0       # arcsec/px; 1.0 reports FWHM in pixels
+  camera_gain: 1.0          # e-/ADU
+  batch_size: 200           # frames per PixInsight call (progress is saved after each)
+
+remote_triage:
+  mode: send                # run's default triage: local (review here, then carry on) | send | build
+  local_preview_size: 2400  # px; previews for local review can be bigger (the page never leaves this PC)
+  local_browser: auto       # auto (Edge/Chrome app window) | default | path to a browser exe
+  outbox_dir: 'D:\Dropbox\SKYSHARE\TRIAGE'  # triage HTML packages are copied here for sharing
+  preview_size: 1200        # px, longest side; smaller = smaller package
+  jpeg_quality: 80
+  workers: 4
+  # Discord: set the SKYSTACK_DISCORD_WEBHOOK environment variable (preferred -- the URL is a secret),
+  # or put it here. Packages under the size limit are attached; bigger ones are announced only.
+  discord_webhook_url: null
+  discord_max_attachment_mb: 10
+  delete_rejected: false    # true: delete rejected registered frames instead of moving them to REJECTED/
+
+stacking:
+  min_frames: 3             # groups with fewer frames are skipped
+  ln_scale: 1024            # LocalNormalization scale (px)
+  rejection_thresholds:     # rejection by frame count: <8 percentile, <20 winsorized sigma, else linear fit
+    percentile_below: 8
+    winsorized_below: 20
+
+postprocess:                # applied to the stacked masterLights -> REGISTERED/<target>/processed/
+  after_stack: false        # run automatically in `finish` (or pass --postprocess / tick it in the dashboard)
+  default_steps: [bxt_correct]   # presets, applied in order (see skystack/postprocess.py)
+  presets:                  # override a built-in preset's params, or add presets {label, process, suffix, params}
+    bxt_correct:
+      params:
+        ai_file: BlurXTerminator.4.pb
+        correct_only: true
+        correct_first: false
+        nonstellar_then_stellar: false
+        lum_only: false
+        sharpen_stars: 0.20
+        adjust_halos: 0.00
+        nonstellar_psf_diameter: 0.00
+        auto_nonstellar_psf: true
+        sharpen_nonstellar: 0.80
+
+client_export:
+  client_targets:           # targets exported automatically by `run_routine.py finish`
+    - M31 Dmitry Dovidenko
+  output_dir: 'D:\\Dropbox\\SKYSHARE\\CLIENT DATA'   # zip goes to <output_dir>/<target>/<target>_<date>.zip
+  include_raw_lights: none  # none | kept (frames that passed triage) | all
+  include_calibration_masters: false  # master flats/darks used for the included raw lights
+  include_processed: true   # also zip the post-processed masters from processed/
+  master_format: fits       # fits | xisf
+  compress: true
+
+### === Triage settings (astro_triage package -- not used by run_routine.py) ===
 triage:
   backend: auto     # auto | cpu | mp | gpu
   n_workers: 8
