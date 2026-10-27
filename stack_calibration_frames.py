@@ -3,7 +3,7 @@ import argparse
 from pathlib import Path
 from collections import defaultdict
 from astro_utils.config_loader import load_config
-from astro_utils.fits_helpers import read_image_header_info, parse_date_from_path, get_val, write_header_info, detect_format
+from astro_utils.fits_helpers import read_image_header_info, parse_date_from_path, get_val, write_header_info, append_to_master_index_parquet, detect_format
 from astro_utils.pixinsight_cli import close_pixinsight, launch_pixinsight, stack_with_pixinsight
 from astro_utils.file_ops import ensure_dir
 import logging
@@ -71,7 +71,10 @@ def safe_fmt(value, fmt=str):
 def stack(groups: dict, output_dir: Path, master_name_pref:str, master_name_fmt:dict, 
           max_days_diff=0, rot_tolerance=None,
           instance=None, exit_instance=None,
-          fmt:str=".xisf"):
+          fmt:str=".xisf",
+          update_index:bool=True,
+          index_path: Path = None,
+          type:str=None):
     """master_name_fmt os a dict where the keys are the unit and the values are tuples of the format strings and units. 
     DO NOT INCLUDE DATE! This will be added automatically following a specific format, i.e. `__%d%m%Y`.
     master_name_pref is a prefix for the master name. E.g., for `flat`, we get `masterFlat`.
@@ -143,6 +146,13 @@ def stack(groups: dict, output_dir: Path, master_name_pref:str, master_name_fmt:
                 logger.debug(f"Updating header for {out_path} with {header_dict}")
                 write_header_info(out_path, header_dict, fmt="auto")
                 logger.debug(f"Created master {master_name_pref.lower()}: {out_path}")
+                
+                # Update master index parquet file
+                if update_index:
+                    assert index_path is not None, "index_path must be provided if update_index is True"
+                    assert type is not None and type.lower() in ['flat', 'dark'], "type must be provided if update_index is True. Valid values are 'FLAT' or 'DARK'."
+                    append_to_master_index_parquet(index_path, out_path, type.upper())
+                
                 # Move files to USED
                 for file in batch:
                     if "USED" not in file.parts:

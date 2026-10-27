@@ -4,7 +4,7 @@ import pandas as pd
 from collections import defaultdict
 from time import sleep, time
 from astro_utils.config_loader import load_config
-from astro_utils.fits_helpers import read_image_header_info, parse_date_from_path, parse_date_from_master_path, detect_format
+from astro_utils.fits_helpers import parse_date_from_header, read_image_header_info, parse_date_from_path, parse_date_from_master_path, detect_format
 
 from astro_utils.pixinsight_cli import launch_pixinsight, close_pixinsight, calibrate_with_pixinsight
 from astro_utils.file_ops import ensure_dir, get_target_name, file_exists_in_tree
@@ -25,10 +25,14 @@ FLATS_DIR = Path(config.get("flat_master_output", "D:/Astrophotography/SkyShare 
 DARKS_DIR = Path(config.get("dark_master_output", "D:/Astrophotography/SkyShare Data/MASTERS/DARK"))
 
 MAX_FLAT_DAYS_DIFF = config.get("calibration_search_days_flat", 4)
-MAX_DARK_MONTHS_DIFF = config.get("calibration_search_months_dark", 3)
+MAX_DARK_MONTHS_DIFF = config.get("calibration_search_months_dark", -1) # -1 to skip darks
 ROT_TOLERANCE = config.get("flat_rotation_tolerance", 0.5)
 OVERWRITE_EXISTING = config.get("overwrite_existing", False)
 ONLY_PLOT = config.get("only_plot", False)
+# Where master flat/dark metadata comes from: "db" (skystack.db, synced with the
+# master folders at the start of each run) or "parquet" (legacy master_index.parquet).
+MASTER_INDEX = str(config.get("master_index", "db")).lower()
+DB_PATH = Path(__file__).parent / "skystack.db"
 
 # FITS keywords
 HEADER_FILTER_KEY = config.get("header_filter_key")
@@ -130,6 +134,7 @@ def find_best_masterv2(
     ignore_filter: bool = False,
     master_fmt: str = "xisf",
     print_progress: bool = False,
+    masters: pd.DataFrame = None,
 ):
     """
     Vectorized (pandas) master selection with the SAME signature and return type as find_best_master().
@@ -150,16 +155,17 @@ def find_best_masterv2(
         print_progress is accepted for compatibility but does nothing.
     """
     # ---- Load index ----
-    idx_path = master_dir / "master_index.parquet"
-    if not idx_path.exists():
-        logger.error(f"Master index not found: {idx_path}")
-        return None
+    if masters is None:
+        idx_path = master_dir / "master_index.parquet"
+        if not idx_path.exists():
+            logger.error(f"Master index not found: {idx_path}")
+            return None
 
-    try:
-        masters = pd.read_parquet(idx_path)
-    except Exception as e:
-        logger.error(f"Failed to read master index parquet {idx_path}: {e}")
-        return None
+        try:
+            masters = pd.read_parquet(idx_path)
+        except Exception as e:
+            logger.error(f"Failed to read master index parquet {idx_path}: {e}")
+            return None
     
     logger.debug(f"# files originally: {masters.shape[0]}")
 
@@ -331,6 +337,24 @@ def find_best_masterv2(
     best = df.loc[month_diff.idxmin()]
     return Path(best["path"])
 
+def load_master_index(master_dir: Path, frame_type: str) -> pd.DataFrame:
+    """The master table find_best_masterv2 matches against, loaded once per run.
+    With master_index "db", skystack.db is synced with master_dir first (only
+    new/changed masters have their headers read). Returns None if unavailable."""
+    if MASTER_INDEX == "parquet":
+        idx_path = master_dir / "master_index.parquet"
+        try:
+            return pd.read_parquet(idx_path)
+        except Exception as e:
+            logger.error(f"Failed to read master index parquet {idx_path}: {e}")
+            return None
+
+    from skystack_db import SkyStackDatabase
+    with SkyStackDatabase(DB_PATH) as db:
+        db.sync_master_calibrations(master_dir, frame_type)
+        return db.master_calibrations_frame(frame_type, master_dir)
+
+
 def calibrate_lights(
     light_dir: Path,
     flats_dir: Path,
@@ -363,6 +387,11 @@ def calibrate_lights(
     }
     """
     calibration_groups = defaultdict(list)
+    flat_index = load_master_index(flats_dir, "FLAT")
+    dark_index = load_master_index(darks_dir, "DARK") if max_dark_months_diff >= 0 else None
+    if flat_index is None or (max_dark_months_diff >= 0 and dark_index is None):
+        logger.error("No master calibration index available. Skipping calibration.")
+        return []
 
     # Build output path
     fits = list(light_dir.rglob("*.fits"))
@@ -379,7 +408,7 @@ def calibrate_lights(
         
         try:
             fits_dict = read_image_header_info(fits_file, fmt="auto")
-            date_obs = parse_date_from_path(fits_file) or None
+            date_obs = parse_date_from_header(hdr=fits_dict)
             logger.debug(f"Processing light frame: {fits_file} with date {date_obs}")
         except Exception as e:
             logger.error(f"Error reading light header {fits_file}: {e}")
@@ -410,7 +439,7 @@ def calibrate_lights(
         flat_master = find_best_masterv2(
             flats_dir, flat_meta, date_obs,
             max_days=max_flat_days_diff, ignore_expt=True, ignore_temp=True,
-            print_progress=True
+            print_progress=True, masters=flat_index
         )
         logger.debug(f"Selected flat master for {fits_file}: {flat_master}")
         
@@ -421,15 +450,21 @@ def calibrate_lights(
             HEADER_TEMPERATURE_KEY: temp
         }
         
-        dark_master = find_best_masterv2(
-            darks_dir, dark_meta, date_obs,
-            max_months=max_dark_months_diff, ignore_rot=True, ignore_filter=True,
-            print_progress=True
-        )
-        logger.debug(f"Selected dark master for {fits_file}: {dark_master}")
+        if max_dark_months_diff >= 0:
+            dark_master = find_best_masterv2(
+                darks_dir, dark_meta, date_obs,
+                max_months=max_dark_months_diff, ignore_rot=True, ignore_filter=True,
+                print_progress=True, masters=dark_index
+            )
+            logger.debug(f"Selected dark master for {fits_file}: {dark_master}")
+        else:
+            # Use None to indicate darks are intentionally skipped (not -1)
+            dark_master = None
+            logger.debug(f"Skipping dark master selection for {fits_file} due to max_dark_months_diff < 0")
 
         # if max_cal_time_diff is None, we don't require that master
-        if (not flat_master and max_flat_days_diff is not None) or (not dark_master and max_dark_months_diff is not None):
+        # Only require dark_master when max_dark_months_diff >= 0
+        if (flat_master is None and max_flat_days_diff is not None) or (dark_master is None and max_dark_months_diff >= 0):
             logger.debug(f"Skipping calibration for {fits_file}: missing master (flat={flat_master}, dark={dark_master})")
             continue
         
@@ -457,7 +492,10 @@ def calibrate_lights(
 
     # Process each group
     for (flat_master, dark_master, out_path, expt, filt, date_obs), light_files in calibration_groups.items():
-        logger.info(f"Calibrating {len(light_files)} {expt}s {filt} lights with flat={flat_master}, dark={dark_master}")
+        if not dark_master:
+            logger.info(f"Calibrating {len(light_files)} {expt}s {filt} lights with flat={flat_master}, dark=skipped")
+        else:
+            logger.info(f"Calibrating {len(light_files)} {expt}s {filt} lights with flat={flat_master}, dark={dark_master}")
         
         # update calibration log
         calib_log_path = out_path / "calibration_log.json"
@@ -474,14 +512,21 @@ def calibrate_lights(
         log_filter = log_data[light_date][filt]
         if expt not in log_filter:
             log_data[light_date][filt][expt] = {
-                "flat_master": str(flat_master) if flat_master else None,
-                "dark_master": str(dark_master) if dark_master else None,
+                "flat_master": str(flat_master) if flat_master is not None else None,
+                "dark_master": str(dark_master) if dark_master is not None else None,
                 "num calibrated": 0,
                 "failed lights": []
             }
+            print(log_data[light_date][filt][expt]['dark_master'])
         log_expt = log_data[light_date][filt][expt]
+        
             
         # running calibration on light group
+        # log message: explicitly detect "dark skipped" when max_dark_months_diff < 0
+        if dark_master is None and max_dark_months_diff < 0:
+            logger.info(f"Calibrating {len(light_files)} {expt}s {filt} lights with flat={flat_master}, dark=skipped")
+        else:
+            logger.info(f"Calibrating {len(light_files)} {expt}s {filt} lights with flat={flat_master}, dark={dark_master}")
         calibrate_with_pixinsight(light_files, 
                                   flat_master, 
                                   dark_master,
@@ -522,36 +567,57 @@ def calibrate_lights(
 
     
 
-def main():
-    logger.info("Starting calibration process...")
-    if TARGET_NAME is None:
-        logger.error("TARGET_NAME must be specified in config.yaml. Exiting.")
-        return
-    
-    target_dir = LIGHT_BASE_DIR / TARGET_NAME
-    if not target_dir.exists():
-        logger.error(f"Target directory {target_dir} does not exist. Exiting.")
-        return
-    
-    
-    calibrate_lights(target_dir, 
-                     FLATS_DIR, 
-                     MAX_FLAT_DAYS_DIFF,
-                     DARKS_DIR, 
-                     MAX_DARK_MONTHS_DIFF,
-                     CALIBRATED_OUTPUT_DIR, 
-                     PIXINSIGHT_INSTANCE,
-                     OVERWRITE_EXISTING,
-                     EXIT_INSTANCE
-                     )
-    logger.info("Calibration process finished.")
+def run_calibration_for_target(target_name: str, sessions: list | None = None) -> Path:
+    """Run calibration for a single target using this module's config-loaded
+    settings (flats/darks dirs, tolerances, PixInsight instance, etc).
 
-    # plot summary for each output directory
+    Factored out of main() so a specific target can be calibrated on demand
+    (e.g. from skystack_ui.py) without going through config.yaml's single
+    TARGET_NAME. `sessions` limits it to those session folders under
+    LIGHT/<target>/ (e.g. ["2024-12-05"]); all sessions when omitted.
+    Returns the target's output directory.
+    """
+    target_dir = LIGHT_BASE_DIR / target_name
+    if not target_dir.exists():
+        raise FileNotFoundError(f"Target directory {target_dir} does not exist.")
+
+    light_dirs = [target_dir / s for s in sessions] if sessions else [target_dir]
+    for light_dir in light_dirs:
+        if not light_dir.exists():
+            raise FileNotFoundError(f"Session directory {light_dir} does not exist.")
+        calibrate_lights(light_dir,
+                         FLATS_DIR,
+                         MAX_FLAT_DAYS_DIFF,
+                         DARKS_DIR,
+                         MAX_DARK_MONTHS_DIFF,
+                         CALIBRATED_OUTPUT_DIR,
+                         PIXINSIGHT_INSTANCE,
+                         OVERWRITE_EXISTING,
+                         EXIT_INSTANCE
+                         )
+
     target_out_dir = CALIBRATED_OUTPUT_DIR / get_target_name(target_dir)
     calib_log_path = target_out_dir / "calibration_log.json"
     if calib_log_path.exists():
         plot_summary(calib_log_path)
         logger.info(f"Summary plot saved for {target_out_dir}")
+
+    return target_out_dir
+
+
+def main():
+    logger.info("Starting calibration process...")
+    if TARGET_NAME is None:
+        logger.error("TARGET_NAME must be specified in config.yaml. Exiting.")
+        return
+
+    try:
+        run_calibration_for_target(TARGET_NAME)
+    except FileNotFoundError as e:
+        logger.error(str(e))
+        return
+
+    logger.info("Calibration process finished.")
 
 
 if __name__ == "__main__":
